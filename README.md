@@ -1,4 +1,4 @@
-# 国家中小学智慧教育平台 电子课本解析工具
+# 国家中小学智慧教育平台 电子课本下载工具
 （[https://basic.smartedu.cn/tchMaterial/]()）
 
 ![Python Version](https://img.shields.io/badge/Python-3.x-blue.svg)
