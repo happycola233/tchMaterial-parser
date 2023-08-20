@@ -128,7 +128,7 @@ root.title("国家中小学智慧教育平台 电子课本解析") # 设置窗�
 
 # 创建一个容器框架
 container_frame = ttk.Frame(root)
-container_frame.pack(anchor='center',expand='yes', padx=int(20*scale), pady=int(20*scale)) # 容器的中心位置放置，允许组件在容器中扩展，水平外边距40，垂直为边距40
+container_frame.pack(anchor='center',expand='yes', padx=int(20*scale), pady=int(20*scale)) # 容器的中心位置放置，允许组件在容器中扩展，水平外边距40，垂直外边距40
 
 title_label = ttk.Label(container_frame, text="国家中小学智慧教育平台 电子课本解析", font=("微软雅黑", 16, "bold")) # 添加标题标签
 title_label.pack(pady=int(5*scale)) # 设置垂直外边距（跟随缩放）
