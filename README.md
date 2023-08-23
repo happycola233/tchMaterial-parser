@@ -8,7 +8,7 @@
 
 电子课本预览页面的网址格式如 <https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=b8e9a3fe-dae7-49c0-86cb-d146f883fd8e&catalogType=tchMaterial&subCatalog=tchMaterial>。
 
-**本工具暂时仅支持 Windows 操作系统。**
+本工具支持 Windows、Linux 等操作系统。
 
 ## 工具特点
 
