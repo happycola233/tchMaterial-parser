@@ -154,7 +154,7 @@ root = tk.Tk()
 #----------高DPI适配start---------
 
 # 获得当前的缩放因子
-ScaleFactor=round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics (0), 2)
+ScaleFactor = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics (0), 2)
 
 # 调用api设置成由应用程序缩放
 try:  # 系统版本 >= win 8.1
