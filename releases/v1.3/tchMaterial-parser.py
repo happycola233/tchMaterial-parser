@@ -4,6 +4,7 @@
 #       wuziqian211（https://space.bilibili.com/425503913）
 
 # 导入相关库
+from functools import partial
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import threading
@@ -12,6 +13,8 @@ import os
 import platform
 import json
 import pyperclip
+
+import bookHelper
 
 # 获取操作系统类型
 os_name = platform.system()
@@ -116,6 +119,8 @@ def download():
         failed_msg = "以下链接无法解析：\n" + "\n".join(failed_links)
         messagebox.showwarning("警告", failed_msg) # 显示警告对话框
 
+bookList = bookHelper.fetch_book_list()
+
 # GUI
 root = tk.Tk()
 
@@ -157,6 +162,108 @@ description_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩�
 
 url_text = tk.Text(container_frame, width=70, height=12) # 添加URL输入框，长度和宽度不使用缩放！！！
 url_text.pack(padx=int(15 * scale), pady=int(15 * scale)) # 设置水平外边距、垂直外边距（跟随缩放）
+
+# 构建选择项
+options = [['---'] + [bookList[k]['name'] for k in bookList.keys()], ['---'], ['---'], ['---'], ['---'], ['---']]
+
+variables = [tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root)]
+
+# 处理用户选择事件
+eventFlag = False # 防止事件循环调用
+def SelEvent(index, *args):
+    global eventFlag
+
+    if eventFlag:
+        eventFlag = False # 检测到循环调用，重置标志位并返回
+        return
+    
+    # 重置后面的选择项
+    if variables[index].get() == '---':
+        for i in range(index + 1, len(drops)):
+            drops[i]['menu'].delete(0, 'end')
+            drops[i]['menu'].add_command(label='---', command=tk._setit(variables[i], '---'))
+
+            eventFlag = True
+            variables[i].set('---')
+            # drops[i]['menu'].configure(state="disabled")
+        return
+    
+    # 更新选择项
+    if index < len(drops) - 1:
+        currP1 = drops[index + 1]
+        
+        currHier = bookList
+        currID = [element for element in currHier if currHier[element]['name'] == variables[0].get()][0]
+        currHier = currHier[currID]['children']
+
+        endFlag = False # 是否到达最终目标
+        for i in range(index):
+            try:
+                currID = [element for element in currHier if currHier[element]['name'] == variables[i + 1].get()][0]
+                currHier = currHier[currID]['children']
+            except KeyError: # 无法继续向下选择，说明已经到达最终目标
+                endFlag = True
+
+        if endFlag:
+            currOptions = ['---']
+        if not 'name' in currHier[list(currHier.keys())[0]]:
+            currOptions = ['---'] + [currHier[k]['title'] for k in currHier.keys()]
+        else:
+            currOptions = ['---'] + [currHier[k]['name'] for k in currHier.keys()]
+
+        currP1['menu'].delete(0, 'end')
+        for choice in currOptions:
+            currP1['menu'].add_command(label=choice, command=tk._setit(variables[index + 1], choice))
+
+        # 到达目标，显示 URL
+        if endFlag:
+            currID = [element for element in currHier if currHier[element]['title'] == variables[index].get()][0]
+            url_text.insert('end', f'\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial')
+            drops[-1]['menu'].delete(0, 'end')
+            drops[-1]['menu'].add_command(label='---', command=tk._setit(variables[-1], '---'))
+            variables[-1].set('---')
+            return
+
+        # 重置后面的选择项
+        for i in range(index + 2, len(drops)):
+            drops[i]['menu'].delete(0, 'end')
+            drops[i]['menu'].add_command(label='---', command=tk._setit(variables[i], '---'))
+            # drops[i]['menu'].configure(state="disabled")
+        
+        for i in range(index + 1, len(drops)):
+            eventFlag = True
+            variables[i].set('---')
+            
+    else: # 最后一项，必为最终目标，显示 URL
+        if variables[-1].get() == '---':
+            return
+
+        currHier = bookList
+        currID = [element for element in currHier if currHier[element]['name'] == variables[0].get()][0]
+        currHier = currHier[currID]['children']
+        for i in range(index - 1):
+            currID = [element for element in currHier if currHier[element]['name'] == variables[i + 1].get()][0]
+            currHier = currHier[currID]['children']
+
+        currID = [element for element in currHier if currHier[element]['title'] == variables[index].get()][0]
+        url_text.insert('end', f'https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial')
+
+# 绑定事件
+for index in range(6):
+    variables[index].trace_add('write', partial(SelEvent, index))
+
+# 添加 Container
+dropdown_frame = ttk.Frame(root)
+dropdown_frame.pack(padx=int(10 * scale), pady=int(10 * scale))
+
+drops = []
+
+# 添加菜单栏
+for i in range(6):
+    drop = tk.OptionMenu( dropdown_frame , variables[i] , *options[i] ) 
+    drop.grid(row=i // 3, column=i % 3, padx=int(15 * scale), pady=int(15 * scale)) # 设置位置，2行3列（跟随缩放）
+    variables[i].set('---')
+    drops.append(drop)
 
 download_btn = ttk.Button(container_frame, text="下载", command=download) # 添加下载按钮
 download_btn.pack(side="left", padx=int(40 * scale), pady=int(5 * scale), ipady=int(5 * scale)) # 设置水平外边距、垂直外边距（跟随缩放），设置按钮高度（跟随缩放）
