@@ -20,7 +20,7 @@ import bookHelper
 os_name = platform.system()
 
 # 如果是Windows操作系统，导入Windows相关库
-if os_name == 'Windows':
+if os_name == "Windows":
     import win32print, win32gui, win32con, win32api, ctypes
 
 # 解析URL
@@ -88,7 +88,7 @@ def download():
     if len(urls) > 1:
         messagebox.showinfo("提示", "您选择了多个链接，将在选定的文件夹中使用教材名称作为文件名进行下载。")
         dir_path = filedialog.askdirectory() # 选择文件夹
-        if os_name == 'Windows':
+        if os_name == "Windows":
             dir_path = dir_path.replace("/", "\\")
         if not dir_path:
             return
@@ -107,7 +107,7 @@ def download():
         else:
             default_filename = getDefaultFilename(contentId) or "download"
             save_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")], initialfile=default_filename) # 选择保存路径
-            if os_name == 'Windows':
+            if os_name == "Windows":
                 save_path = save_path.replace("/", "\\")
 
             if not save_path:
@@ -125,7 +125,7 @@ bookList = bookHelper.fetch_book_list()
 root = tk.Tk()
 
 # ----------高DPI适配start---------
-if os_name == 'Windows':
+if os_name == "Windows":
     scale = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取屏幕缩放比例
     
     # 调用api设置成由应用程序缩放
@@ -164,7 +164,7 @@ url_text = tk.Text(container_frame, width=70, height=12) # 添加URL输入框，
 url_text.pack(padx=int(15 * scale), pady=int(15 * scale)) # 设置水平外边距、垂直外边距（跟随缩放）
 
 # 构建选择项
-options = [['---'] + [bookList[k]['name'] for k in bookList.keys()], ['---'], ['---'], ['---'], ['---'], ['---']]
+options = [["---"] + [bookList[k]["name"] for k in bookList.keys()], ["---"], ["---"], ["---"], ["---"], ["---"]]
 
 variables = [tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root)]
 
@@ -178,14 +178,14 @@ def SelEvent(index, *args):
         return
     
     # 重置后面的选择项
-    if variables[index].get() == '---':
+    if variables[index].get() == "---":
         for i in range(index + 1, len(drops)):
-            drops[i]['menu'].delete(0, 'end')
-            drops[i]['menu'].add_command(label='---', command=tk._setit(variables[i], '---'))
+            drops[i]["menu"].delete(0, "end")
+            drops[i]["menu"].add_command(label="---", command=tk._setit(variables[i], "---"))
 
             eventFlag = True
-            variables[i].set('---')
-            # drops[i]['menu'].configure(state="disabled")
+            variables[i].set("---")
+            # drops[i]["menu"].configure(state="disabled")
         return
     
     # 更新选择项
@@ -193,64 +193,64 @@ def SelEvent(index, *args):
         currP1 = drops[index + 1]
         
         currHier = bookList
-        currID = [element for element in currHier if currHier[element]['name'] == variables[0].get()][0]
-        currHier = currHier[currID]['children']
+        currID = [element for element in currHier if currHier[element]["name"] == variables[0].get()][0]
+        currHier = currHier[currID]["children"]
 
         endFlag = False # 是否到达最终目标
         for i in range(index):
             try:
-                currID = [element for element in currHier if currHier[element]['name'] == variables[i + 1].get()][0]
-                currHier = currHier[currID]['children']
+                currID = [element for element in currHier if currHier[element]["name"] == variables[i + 1].get()][0]
+                currHier = currHier[currID]["children"]
             except KeyError: # 无法继续向下选择，说明已经到达最终目标
                 endFlag = True
 
         if endFlag:
-            currOptions = ['---']
-        if not 'name' in currHier[list(currHier.keys())[0]]:
-            currOptions = ['---'] + [currHier[k]['title'] for k in currHier.keys()]
+            currOptions = ["---"]
+        if not "name" in currHier[list(currHier.keys())[0]]:
+            currOptions = ["---"] + [currHier[k]["title"] for k in currHier.keys()]
         else:
-            currOptions = ['---'] + [currHier[k]['name'] for k in currHier.keys()]
+            currOptions = ["---"] + [currHier[k]["name"] for k in currHier.keys()]
 
-        currP1['menu'].delete(0, 'end')
+        currP1["menu"].delete(0, "end")
         for choice in currOptions:
-            currP1['menu'].add_command(label=choice, command=tk._setit(variables[index + 1], choice))
+            currP1["menu"].add_command(label=choice, command=tk._setit(variables[index + 1], choice))
 
         # 到达目标，显示 URL
         if endFlag:
-            currID = [element for element in currHier if currHier[element]['title'] == variables[index].get()][0]
-            url_text.insert('end', f'\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial')
-            drops[-1]['menu'].delete(0, 'end')
-            drops[-1]['menu'].add_command(label='---', command=tk._setit(variables[-1], '---'))
-            variables[-1].set('---')
+            currID = [element for element in currHier if currHier[element]["title"] == variables[index].get()][0]
+            url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
+            drops[-1]["menu"].delete(0, "end")
+            drops[-1]["menu"].add_command(label="---", command=tk._setit(variables[-1], "---"))
+            variables[-1].set("---")
             return
 
         # 重置后面的选择项
         for i in range(index + 2, len(drops)):
-            drops[i]['menu'].delete(0, 'end')
-            drops[i]['menu'].add_command(label='---', command=tk._setit(variables[i], '---'))
-            # drops[i]['menu'].configure(state="disabled")
+            drops[i]["menu"].delete(0, "end")
+            drops[i]["menu"].add_command(label="---", command=tk._setit(variables[i], "---"))
+            # drops[i]["menu"].configure(state="disabled")
         
         for i in range(index + 1, len(drops)):
             eventFlag = True
-            variables[i].set('---')
+            variables[i].set("---")
             
     else: # 最后一项，必为最终目标，显示 URL
-        if variables[-1].get() == '---':
+        if variables[-1].get() == "---":
             return
 
         currHier = bookList
-        currID = [element for element in currHier if currHier[element]['name'] == variables[0].get()][0]
-        currHier = currHier[currID]['children']
+        currID = [element for element in currHier if currHier[element]["name"] == variables[0].get()][0]
+        currHier = currHier[currID]["children"]
         for i in range(index - 1):
-            currID = [element for element in currHier if currHier[element]['name'] == variables[i + 1].get()][0]
-            currHier = currHier[currID]['children']
+            currID = [element for element in currHier if currHier[element]["name"] == variables[i + 1].get()][0]
+            currHier = currHier[currID]["children"]
 
-        currID = [element for element in currHier if currHier[element]['title'] == variables[index].get()][0]
-        url_text.insert('end', f'https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial')
+        currID = [element for element in currHier if currHier[element]["title"] == variables[index].get()][0]
+        url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
 
 # 绑定事件
 for index in range(6):
-    variables[index].trace_add('write', partial(SelEvent, index))
+    variables[index].trace_add("write", partial(SelEvent, index))
 
 # 添加 Container
 dropdown_frame = ttk.Frame(root)
@@ -262,7 +262,7 @@ drops = []
 for i in range(6):
     drop = tk.OptionMenu( dropdown_frame , variables[i] , *options[i] ) 
     drop.grid(row=i // 3, column=i % 3, padx=int(15 * scale), pady=int(15 * scale)) # 设置位置，2行3列（跟随缩放）
-    variables[i].set('---')
+    variables[i].set("---")
     drops.append(drop)
 
 download_btn = ttk.Button(container_frame, text="下载", command=download) # 添加下载按钮
