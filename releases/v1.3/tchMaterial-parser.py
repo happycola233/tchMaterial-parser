@@ -246,7 +246,7 @@ def SelEvent(index, *args):
             currHier = currHier[currID]["children"]
 
         currID = [element for element in currHier if currHier[element]["title"] == variables[index].get()][0]
-        url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
+        url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
 
 # 绑定事件
 for index in range(6):
