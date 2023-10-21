@@ -14,7 +14,6 @@ import platform
 import json
 import pyperclip
 
-import bookHelper
 
 # 获取操作系统类型
 os_name = platform.system()
@@ -119,7 +118,57 @@ def download():
         failed_msg = "以下链接无法解析：\n" + "\n".join(failed_links)
         messagebox.showwarning("警告", failed_msg) # 显示警告对话框
 
-bookList = bookHelper.fetch_book_list()
+class BookHelper:
+    def __init__(self):
+        self.parsedHierarchy = None
+        
+    # 解析层级数据
+    def parse_hierarchy(self, hier):
+        parsed = {}
+
+        # 如果没有层级数据，返回空
+        if not hier:
+            return None
+        for h in hier:
+            for ch in h["children"]:
+                parsed[ch["tag_id"]] = {"name": ch["tag_name"], "children": self.parse_hierarchy(ch["hierarchies"])}
+        return parsed
+
+    # 获取课本列表
+    def fetch_book_list(self):
+        # 获取层级数据
+        tagsResp = requests.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/tch_material_tag.json")
+        tagsData = tagsResp.json()
+        self.parsedHierarchy = self.parse_hierarchy(tagsData["hierarchies"])
+
+        # 获取课本列表 URL 列表
+        listResp = requests.get("https://s-file-2.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json")
+        listData = listResp.json()["urls"].split(",")
+
+        # 获取课本列表
+        for url in listData:
+            bookResp = requests.get(url)
+            bookData = bookResp.json()
+            for i in bookData:
+                # 解析课本层级数据
+                tagPaths = i["tag_paths"][0].split("/")[2:]
+
+                # 如果课本层级数据不在层级数据中，跳过
+                tempHier = self.parsedHierarchy[i["tag_paths"][0].split("/")[1]]
+                if not tagPaths[0] in tempHier["children"]:
+                    continue
+
+                # 分别解析课本层级
+                for p in tagPaths:
+                    if tempHier["children"] and tempHier["children"].get(p):
+                        tempHier = tempHier["children"].get(p)
+                if not tempHier["children"]:
+                    tempHier["children"] = {}
+                tempHier["children"][i["id"]] = i
+
+        return self.parsedHierarchy
+    
+bookList = BookHelper().fetch_book_list()
 
 # GUI
 root = tk.Tk()
@@ -218,7 +267,10 @@ def SelEvent(index, *args):
         # 到达目标，显示 URL
         if endFlag:
             currID = [element for element in currHier if currHier[element]["title"] == variables[index].get()][0]
-            url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
+            if url_text.get("1.0", tk.END) == "\n": # URL输入框为空的时候，插入的内容前面不加换行
+                url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
+            else:
+                url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
             drops[-1]["menu"].delete(0, "end")
             drops[-1]["menu"].add_command(label="---", command=tk._setit(variables[-1], "---"))
             variables[-1].set("---")
@@ -246,7 +298,10 @@ def SelEvent(index, *args):
             currHier = currHier[currID]["children"]
 
         currID = [element for element in currHier if currHier[element]["title"] == variables[index].get()][0]
-        url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
+        if url_text.get("1.0", tk.END) == "\n": # URL输入框为空的时候，插入的内容前面不加换行
+            url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
+        else:
+            url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
 
 # 绑定事件
 for index in range(6):
@@ -260,7 +315,9 @@ drops = []
 
 # 添加菜单栏
 for i in range(6):
-    drop = tk.OptionMenu( dropdown_frame , variables[i] , *options[i] ) 
+    drop = ttk.OptionMenu( dropdown_frame , variables[i] , *options[i] ) 
+    drop.config(state="active") # 配置下拉菜单为始终活跃状态，保证下拉菜单一直有形状
+    drop.bind("<Leave>", lambda e: "break") # 绑定鼠标移出事件，当鼠标移出下拉菜单时，执行lambda函数，"break"表示中止事件传递
     drop.grid(row=i // 3, column=i % 3, padx=int(15 * scale), pady=int(15 * scale)) # 设置位置，2行3列（跟随缩放）
     variables[i].set("---")
     drops.append(drop)
