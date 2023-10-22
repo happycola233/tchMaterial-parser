@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 电子课本下载工具 v1.3
+# 国家中小学智慧教育平台 电子课本下载工具 v2.0
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）
 #       wuziqian211（https://space.bilibili.com/425503913）
 
