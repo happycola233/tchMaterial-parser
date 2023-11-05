@@ -73,7 +73,7 @@ def download_file(url, save_path): # 下载文件
     all_total_size += total_size
     with open(save_path, "wb") as file:
         download_size = 0
-        for chunk in response.iter_content(chunk_size = 131072): # 分块下载，每次下载 131072 字节（128 KB）
+        for chunk in response.iter_content(chunk_size=131072): # 分块下载，每次下载 131072 字节（128 KB）
             file.write(chunk)
             def update_progress():
                 global all_download_size, all_total_size
@@ -83,10 +83,10 @@ def download_file(url, save_path): # 下载文件
                     # 更新进度条
                     download_progress_bar["value"] = download_progress
                     # 更新标签以显示当前下载进度
-                    progress_label.config(text = f"{format_bytes(all_download_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{task_number}")  # 更新标签
+                    progress_label.config(text=f"{format_bytes(all_download_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{task_number}") # 更新标签
                     
                     if all_download_size >= all_total_size:
-                        time.sleep(0.5)  # 延迟 0.5 秒
+                        time.sleep(0.5) # 延迟 0.5 秒
                         download_progress_bar["value"] = 0 # 重置进度条
                         progress_label.config(text="等待下载") # 清空进度标签
                         download_btn.config(state="normal") # 设置下载按钮为启用状态
