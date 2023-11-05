@@ -293,9 +293,9 @@ url_text.pack(padx=int(15 * scale), pady=int(15 * scale)) # 设置水平外边�
 
 # 创建右键菜单
 context_menu = tk.Menu(root, tearoff=0)
-context_menu.add_command(label="剪切（Ctrl + X）", command=lambda: url_text.event_generate("<<Cut>>"))
-context_menu.add_command(label="复制（Ctrl + C）", command=lambda: url_text.event_generate("<<Copy>>"))
-context_menu.add_command(label="粘贴（Ctrl + V）", command=lambda: url_text.event_generate("<<Paste>>"))
+context_menu.add_command(label="剪切 (Ctrl + X)", command=lambda: url_text.event_generate("<<Cut>>"))
+context_menu.add_command(label="复制 (Ctrl + C)", command=lambda: url_text.event_generate("<<Copy>>"))
+context_menu.add_command(label="粘贴 (Ctrl + V)", command=lambda: url_text.event_generate("<<Paste>>"))
 # 绑定右键菜单到文本框（3 代表鼠标的右键按钮）
 url_text.bind("<Button-3>", lambda event: context_menu.post(event.x_root, event.y_root))
 
