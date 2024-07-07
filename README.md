@@ -21,3 +21,7 @@
 1. 将电子课本的预览页面网址粘贴到程序窗口的文本框中，**如您要下载多个电子课本，请以换行符分割多个网址**；
 2. 点击“**解析并复制**”按钮，工具会解析有效的电子课本 PDF 网址并复制到剪贴板；
 3. 或者点击“**下载**”按钮，并选择下载目录和文件名，本工具会将电子课本 PDF 文件下载到您指定的位置。
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=happycola233/tchMaterial-parser&type=Date)](https://star-history.com/#happycola233/tchMaterial-parser&Date)
