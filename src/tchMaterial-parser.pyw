@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 电子课本下载工具 v2.0
+# 国家中小学智慧教育平台 电子课本下载工具 v2.1
 #   https://github.com/happycola233/tchMaterial-parser
-# 最近更新于：2023-11-06
+# 最近更新于：2024-08-18
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
 
 # 导入相关库
@@ -16,6 +16,17 @@ import threading, requests, pyperclip, psutil
 os_name = platform.system() # 获取操作系统类型
 if os_name == "Windows": # 如果是 Windows 操作系统，导入 Windows 相关库
     import win32print, win32gui, win32con, win32api, ctypes
+
+    # 高 DPI 适配
+    scale = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
+
+    # 调用 API 设置成由应用程序缩放
+    try: # Windows 8.1 或更新
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except: # Windows 8 或更老
+        ctypes.windll.user32.SetProcessDPIAware()
+else:
+    scale = 1
 
 def parse(url): # 解析 URL
     try:
@@ -170,12 +181,12 @@ class BookHelper: # 获取网站上所有课本的数据
     def __init__(self):
         self.parsedHierarchy = None
     
-    def parse_hierarchy(self, hier): # 解析层级数据
-        if not hier: # 如果没有层级数据，返回空
+    def parse_hierarchy(self, hierarchy): # 解析层级数据
+        if not hierarchy: # 如果没有层级数据，返回空
             return None
         
         parsed = {}
-        for h in hier:
+        for h in hierarchy:
             for ch in h["children"]:
                 parsed[ch["tag_id"]] = {"name": ch["tag_name"], "children": self.parse_hierarchy(ch["hierarchies"])}
         return parsed
@@ -186,7 +197,7 @@ class BookHelper: # 获取网站上所有课本的数据
         tagsData = tagsResp.json()
         self.parsedHierarchy = self.parse_hierarchy(tagsData["hierarchies"])
         
-        # 获取课本列表 URL 列表
+        # 获取课本 URL 列表
         listResp = requests.get("https://s-file-2.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json", proxies={ "http": None, "https": None })
         listData = listResp.json()["urls"].split(",")
         
@@ -195,21 +206,22 @@ class BookHelper: # 获取网站上所有课本的数据
             bookResp = requests.get(url, proxies={ "http": None, "https": None })
             bookData = bookResp.json()
             for i in bookData:
-                # 解析课本层级数据
-                tagPaths = i["tag_paths"][0].split("/")[2:]
-                
-                # 如果课本层级数据不在层级数据中，跳过
-                tempHier = self.parsedHierarchy[i["tag_paths"][0].split("/")[1]]
-                if not tagPaths[0] in tempHier["children"]:
-                    continue
-                
-                # 分别解析课本层级
-                for p in tagPaths:
-                    if tempHier["children"] and tempHier["children"].get(p):
-                        tempHier = tempHier["children"].get(p)
-                if not tempHier["children"]:
-                    tempHier["children"] = {}
-                tempHier["children"][i["id"]] = i
+                if (len(i["tag_paths"]) > 0): # 某些非课本资料的 tag_paths 属性为空数组
+                    # 解析课本层级数据
+                    tagPaths = i["tag_paths"][0].split("/")[2:] # 电子课本 tag_paths 的前两项为“教材”、“电子教材”
+                    
+                    # 如果课本层级数据不在层级数据中，跳过
+                    tempHier = self.parsedHierarchy[i["tag_paths"][0].split("/")[1]]
+                    if not tagPaths[0] in tempHier["children"]:
+                        continue
+                    
+                    # 分别解析课本层级
+                    for p in tagPaths:
+                        if tempHier["children"] and tempHier["children"].get(p):
+                            tempHier = tempHier["children"].get(p)
+                    if not tempHier["children"]:
+                        tempHier["children"] = {}
+                    tempHier["children"][i["id"]] = i
         
         return self.parsedHierarchy
 
@@ -222,23 +234,11 @@ def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元�
 try:
     bookList = BookHelper().fetch_book_list()
 except:
-    messagebox.showwarning("警告", "网络连接异常，程序将关闭。") # 弹出警告窗口
-    sys.exit() # 退出自身进程
+    bookList = {}
+    messagebox.showwarning("警告", "获取电子课本列表失败，请手动填写电子课本链接，或重新打开本程序") # 弹出警告窗口
 
 # GUI
 root = tk.Tk()
-
-# 高 DPI 适配
-if os_name == "Windows":
-    scale = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
-
-    # 调用 API 设置成由应用程序缩放
-    try: # Windows 8.1 或更新
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    except: # Windows 8 或更老
-        ctypes.windll.user32.SetProcessDPIAware()
-else:
-    scale = 1
 
 root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
 
@@ -296,6 +296,7 @@ context_menu = tk.Menu(root, tearoff=0)
 context_menu.add_command(label="剪切 (Ctrl + X)", command=lambda: url_text.event_generate("<<Cut>>"))
 context_menu.add_command(label="复制 (Ctrl + C)", command=lambda: url_text.event_generate("<<Copy>>"))
 context_menu.add_command(label="粘贴 (Ctrl + V)", command=lambda: url_text.event_generate("<<Paste>>"))
+
 # 绑定右键菜单到文本框（3 代表鼠标的右键按钮）
 url_text.bind("<Button-3>", lambda event: context_menu.post(event.x_root, event.y_root))
 
