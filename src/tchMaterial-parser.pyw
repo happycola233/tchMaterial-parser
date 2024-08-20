@@ -57,7 +57,10 @@ def parse(url): # 解析 URL
         }
         """
         # 其中 $.ti_items 的每一项对应一个电子课本
-        response = requests.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{contentId}.json", proxies={ "http": None, "https": None })
+        if "syncClassroom/basicWork/detail" in url: # 对于“基础性作业”的解析
+            response = requests.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{contentId}.json", proxies={ "http": None, "https": None })
+        else: # 对于课本的解析
+            response = requests.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{contentId}.json", proxies={ "http": None, "https": None })
         data = json.loads(response.text)
         for item in list(data["ti_items"]):
             if item["lc_ti_format"] == "pdf": # 找到存有 PDF 链接列表的项
