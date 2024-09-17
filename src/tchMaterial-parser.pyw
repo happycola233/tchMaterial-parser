@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 # 国家中小学智慧教育平台 电子课本下载工具 v2.1.1
 #   https://github.com/happycola233/tchMaterial-parser
-# 最近更新于：2024-08-20
+# 最近更新于：2024-09-17
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
 
 # 导入相关库
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import os, sys, platform
+import os, platform
 from functools import partial
 import time, json, base64, tempfile
 import threading, requests, pyperclip, psutil
@@ -58,9 +58,9 @@ def parse(url): # 解析 URL
         """
         # 其中 $.ti_items 的每一项对应一个电子课本
         if "syncClassroom/basicWork/detail" in url: # 对于“基础性作业”的解析
-            response = requests.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{contentId}.json", proxies={ "http": None, "https": None })
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{contentId}.json")
         else: # 对于课本的解析
-            response = requests.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{contentId}.json", proxies={ "http": None, "https": None })
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{contentId}.json")
         data = json.loads(response.text)
         for item in list(data["ti_items"]):
             if item["lc_ti_format"] == "pdf": # 找到存有 PDF 链接列表的项
@@ -71,7 +71,7 @@ def parse(url): # 解析 URL
         return None, None # 如果解析失败，返回 None
 
 def getDefaultFilename(contentId): # 获取默认文件名
-    response = requests.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{contentId}.json", proxies={ "http": None, "https": None })
+    response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{contentId}.json")
     try:
         data = json.loads(response.text)
         return data["title"] # 返回教材标题
@@ -81,7 +81,7 @@ def getDefaultFilename(contentId): # 获取默认文件名
 def download_file(url, save_path): # 下载文件
     global all_download_size, all_total_size, downloaded_number, task_number
     task_number += 1
-    response = requests.get(url, stream=True, proxies={ "http": None, "https": None })
+    response = session.get(url, stream=True)
     total_size = int(response.headers.get("Content-Length", 0))
     all_total_size += total_size
     with open(save_path, "wb") as file:
@@ -195,17 +195,17 @@ class BookHelper: # 获取网站上所有课本的数据
     
     def fetch_book_list(self): # 获取课本列表
         # 获取层级数据
-        tagsResp = requests.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/tch_material_tag.json", proxies={ "http": None, "https": None })
+        tagsResp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/tch_material_tag.json")
         tagsData = tagsResp.json()
         self.parsedHierarchy = self.parse_hierarchy(tagsData["hierarchies"])
         
         # 获取课本 URL 列表
-        listResp = requests.get("https://s-file-2.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json", proxies={ "http": None, "https": None })
+        listResp = session.get("https://s-file-2.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json")
         listData = listResp.json()["urls"].split(",")
         
         # 获取课本列表
         for url in listData:
-            bookResp = requests.get(url, proxies={ "http": None, "https": None })
+            bookResp = session.get(url)
             bookData = bookResp.json()
             for i in bookData:
                 if (len(i["tag_paths"]) > 0): # 某些非课本资料的 tag_paths 属性为空数组
@@ -233,6 +233,11 @@ def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元�
     # t.daemon = True
     t.start()
 
+# 初始化请求
+session = requests.Session()
+session.proxies = { "http": None, "https": None }
+
+# 获取电子课本列表
 try:
     bookList = BookHelper().fetch_book_list()
 except:
@@ -352,10 +357,7 @@ def SelEvent(index, *args):
         
         if endFlag:
             currOptions = ["---"]
-        if not "name" in currHier[list(currHier.keys())[0]]:
-            currOptions = ["---"] + [currHier[k]["title"] for k in currHier.keys()]
-        else:
-            currOptions = ["---"] + [currHier[k]["name"] for k in currHier.keys()]
+        currOptions = ["---"] + [currHier[k]["name"] if "name" in currHier[k] else currHier[k]["title"] for k in currHier.keys()]
         
         currP1["menu"].delete(0, "end")
         for choice in currOptions:
