@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 电子课本下载工具 v2.1.1
+# 国家中小学智慧教育平台 电子课本下载工具 v2.2
 #   https://github.com/happycola233/tchMaterial-parser
 # 最近更新于：2024-09-17
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
@@ -190,7 +190,7 @@ class BookHelper: # 获取网站上所有课本的数据
         parsed = {}
         for h in hierarchy:
             for ch in h["children"]:
-                parsed[ch["tag_id"]] = {"name": ch["tag_name"], "children": self.parse_hierarchy(ch["hierarchies"])}
+                parsed[ch["tag_id"]] = { "displayName": ch["tag_name"], "children": self.parse_hierarchy(ch["hierarchies"]) }
         return parsed
     
     def fetch_book_list(self): # 获取课本列表
@@ -223,6 +223,9 @@ class BookHelper: # 获取网站上所有课本的数据
                             tempHier = tempHier["children"].get(p)
                     if not tempHier["children"]:
                         tempHier["children"] = {}
+
+                    i["displayName"] = i["title"] if "title" in i else i["name"] if "name" in i else f"(未知电子教材 {i["id"]})"
+                    
                     tempHier["children"][i["id"]] = i
         
         return self.parsedHierarchy
@@ -317,7 +320,7 @@ context_menu.add_command(label="粘贴 (Ctrl + V)", command=lambda: url_text.eve
 # 绑定右键菜单到文本框（3 代表鼠标的右键按钮）
 url_text.bind("<Button-3>", lambda event: context_menu.post(event.x_root, event.y_root))
 
-options = [["---"] + [bookList[k]["name"] for k in bookList.keys()], ["---"], ["---"], ["---"], ["---"], ["---"]] # 构建选择项
+options = [["---"] + [bookList[k]["displayName"] for k in bookList.keys()], ["---"], ["---"], ["---"], ["---"], ["---"]] # 构建选择项
 
 variables = [tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root)]
 
@@ -344,27 +347,29 @@ def SelEvent(index, *args):
         currP1 = drops[index + 1]
         
         currHier = bookList
-        currID = [element for element in currHier if currHier[element]["name"] == variables[0].get()][0]
+        currID = [element for element in currHier if currHier[element]["displayName"] == variables[0].get()][0]
         currHier = currHier[currID]["children"]
         
         endFlag = False # 是否到达最终目标
         for i in range(index):
             try:
-                currID = [element for element in currHier if currHier[element]["name"] == variables[i + 1].get()][0]
+                currID = [element for element in currHier if currHier[element]["displayName"] == variables[i + 1].get()][0]
                 currHier = currHier[currID]["children"]
             except KeyError: # 无法继续向下选择，说明已经到达最终目标
                 endFlag = True
+                break
         
         if endFlag:
             currOptions = ["---"]
-        currOptions = ["---"] + [currHier[k]["name"] if "name" in currHier[k] else currHier[k]["title"] for k in currHier.keys()]
+        else:
+            currOptions = ["---"] + [currHier[k]["displayName"] for k in currHier.keys()]
         
         currP1["menu"].delete(0, "end")
         for choice in currOptions:
             currP1["menu"].add_command(label=choice, command=tk._setit(variables[index + 1], choice))
         
         if endFlag: # 到达目标，显示 URL
-            currID = [element for element in currHier if currHier[element]["title"] == variables[index].get()][0]
+            currID = [element for element in currHier if currHier[element]["displayName"] == variables[index].get()][0]
             if url_text.get("1.0", tk.END) == "\n": # URL 输入框为空的时候，插入的内容前面不加换行
                 url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
             else:
@@ -372,7 +377,6 @@ def SelEvent(index, *args):
             drops[-1]["menu"].delete(0, "end")
             drops[-1]["menu"].add_command(label="---", command=tk._setit(variables[-1], "---"))
             variables[-1].set("---")
-            return
         
         for i in range(index + 2, len(drops)): # 重置后面的选择项
             drops[i]["menu"].delete(0, "end")
@@ -388,13 +392,13 @@ def SelEvent(index, *args):
             return
         
         currHier = bookList
-        currID = [element for element in currHier if currHier[element]["name"] == variables[0].get()][0]
+        currID = [element for element in currHier if currHier[element]["displayName"] == variables[0].get()][0]
         currHier = currHier[currID]["children"]
         for i in range(index - 1):
-            currID = [element for element in currHier if currHier[element]["name"] == variables[i + 1].get()][0]
+            currID = [element for element in currHier if currHier[element]["displayName"] == variables[i + 1].get()][0]
             currHier = currHier[currID]["children"]
         
-        currID = [element for element in currHier if currHier[element]["title"] == variables[index].get()][0]
+        currID = [element for element in currHier if currHier[element]["displayName"] == variables[index].get()][0]
         if url_text.get("1.0", tk.END) == "\n": # URL 输入框为空的时候，插入的内容前面不加换行
             url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId={currID}&catalogType=tchMaterial&subCatalog=tchMaterial")
         else:
