@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 电子课本下载工具 v2.3
+# 国家中小学智慧教育平台 资源下载工具 v2.3
 #   https://github.com/happycola233/tchMaterial-parser
-# 最近更新于：2024-10-02
+# 最近更新于：2024-10-03
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
 
 # 导入相关库
@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os, platform
 from functools import partial
-import json, base64, tempfile
+import base64, tempfile
 import threading, requests, pyperclip, psutil
 
 os_name = platform.system() # 获取操作系统类型
@@ -29,7 +29,7 @@ else:
 
 def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 URL
     try:
-        content_id, content_type, pdf_url = None, None, None
+        content_id, content_type, resource_url = None, None, None
 
         # 简单提取 URL 中的 contentId 与 contentType（这种方法不严谨，但为了减少导入的库只能这样了）
         for q in url[url.find("?") + 1:].split("&"):
@@ -44,7 +44,7 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
         if not content_type:
             content_type = "assets_document"
 
-        # 获得该 contentId 下电子课本的信息，返回数据示例：
+        # 获得该 contentId 下资源的信息，返回数据示例：
         """
         {
             "id": "4f64356a-8df7-4579-9400-e32c9a7f6718",
@@ -52,7 +52,7 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
             "ti_items": [
                 {
                     // ...
-                    "ti_storages": [ // PDF 源文件地址
+                    "ti_storages": [ // 资源文件地址
                         "https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/4f64356a-8df7-4579-9400-e32c9a7f6718.pkg/pdf.pdf",
                         "https://r2-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/4f64356a-8df7-4579-9400-e32c9a7f6718.pkg/pdf.pdf",
                         "https://r3-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/4f64356a-8df7-4579-9400-e32c9a7f6718.pkg/pdf.pdf"
@@ -65,7 +65,8 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
             ]
         }
         """
-        # 其中 $.ti_items 的每一项对应一个电子课本
+        # 其中 $.ti_items 的每一项对应一个资源
+
         if "syncClassroom/basicWork/detail" in url: # 对于“基础性作业”的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
         else: # 对于课本的解析
@@ -74,28 +75,28 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
             else: # 对普通电子课本的解析
                 response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
         
-        data = json.loads(response.text)
+        data = response.json()
         for item in list(data["ti_items"]):
             if item["lc_ti_format"] == "pdf": # 找到存有 PDF 链接列表的项
-                pdf_url: str = item["ti_storages"][0].replace("-private", "") # 获取并构建 PDF 的 URL
+                resource_url: str = item["ti_storages"][0].replace("-private", "") # 获取并构建 PDF 的 URL
                 break
 
-        if not pdf_url:
+        if not resource_url:
             if content_type == "thematic_course": # 专题课程
                 resources_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/thematic_course/{content_id}/resources/list.json")
-                resources_data = json.loads(resources_resp.text)
+                resources_data = resources_resp.json()
                 for resource in list(resources_data):
                     if resource["resource_type_code"] == "assets_document":
                         for item in list(resource["ti_items"]):
                             if item["lc_ti_format"] == "pdf":
-                                pdf_url: str = item["ti_storages"][0].replace("-private", "")
+                                resource_url: str = item["ti_storages"][0].replace("-private", "")
                                 break
-                if not pdf_url:
+                if not resource_url:
                     return None, None, None
             else:
                 return None, None, None
 
-        return pdf_url, content_id, data["title"]
+        return resource_url, content_id, data["title"]
     except:
         return None, None, None # 如果解析失败，返回 None
 
@@ -150,27 +151,27 @@ def format_bytes(size: float) -> str: # 格式化字节
 
 def parse_and_copy() -> None: # 解析并复制链接
     urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()] # 获取所有非空行
-    pdf_links = []
+    resource_links = []
     failed_links = []
 
     for url in urls:
-        pdf_url = parse(url)[0]
-        if not pdf_url:
+        resource_url = parse(url)[0]
+        if not resource_url:
             failed_links.append(url) # 添加到失败链接
             continue
-        pdf_links.append(pdf_url)
+        resource_links.append(resource_url)
 
     if failed_links:
         messagebox.showwarning("警告", "以下“行”无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
 
-    if pdf_links:
-        pyperclip.copy("\n".join(pdf_links)) # 将链接复制到剪贴板
-        messagebox.showinfo("提示", "PDF 链接已复制到剪贴板")
+    if resource_links:
+        pyperclip.copy("\n".join(resource_links)) # 将链接复制到剪贴板
+        messagebox.showinfo("提示", "资源链接已复制到剪贴板")
 
-def download() -> None: # 下载 PDF 文件
+def download() -> None: # 下载资源文件
     global download_states
     download_btn.config(state="disabled") # 设置下载按钮为禁用状态
-    download_states: list[dict] = [] # 初始化下载状态
+    download_states = [] # 初始化下载状态
     urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()] # 获取所有非空行
     failed_links = []
 
@@ -186,8 +187,8 @@ def download() -> None: # 下载 PDF 文件
         dir_path = None
 
     for url in urls:
-        pdf_url, content_id, title = parse(url)
-        if not pdf_url:
+        resource_url, content_id, title = parse(url)
+        if not resource_url:
             failed_links.append(url) # 添加到失败链接
             continue
 
@@ -203,7 +204,7 @@ def download() -> None: # 下载 PDF 文件
             if os_name == "Windows":
                 save_path = save_path.replace("/", "\\")
 
-        thread_it(download_file, (pdf_url, save_path)) # 开始下载（多线程，防止窗口卡死）
+        thread_it(download_file, (resource_url, save_path)) # 开始下载（多线程，防止窗口卡死）
 
     if failed_links:
         messagebox.showwarning("警告", "以下“行”无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
@@ -212,10 +213,7 @@ def download() -> None: # 下载 PDF 文件
     if not urls and not failed_links:
         download_btn.config(state="normal") # 设置下载按钮为启用状态
 
-class BookHelper: # 获取网站上所有课本的数据
-    def __init__(self):
-        self.parsed_hier = None
-
+class resource_helper: # 获取网站上资源的数据
     def parse_hierarchy(self, hierarchy): # 解析层级数据
         if not hierarchy: # 如果没有层级数据，返回空
             return None
@@ -223,20 +221,20 @@ class BookHelper: # 获取网站上所有课本的数据
         parsed = {}
         for h in hierarchy:
             for ch in h["children"]:
-                parsed[ch["tag_id"]] = { "displayName": ch["tag_name"], "children": self.parse_hierarchy(ch["hierarchies"]) }
+                parsed[ch["tag_id"]] = { "display_name": ch["tag_name"], "children": self.parse_hierarchy(ch["hierarchies"]) }
         return parsed
 
     def fetch_book_list(self): # 获取课本列表
-        # 获取层级数据
+        # 获取电子课本层级数据
         tags_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/tch_material_tag.json")
         tags_data = tags_resp.json()
-        self.parsed_hier = self.parse_hierarchy(tags_data["hierarchies"])
+        parsed_hier = self.parse_hierarchy(tags_data["hierarchies"])
 
-        # 获取课本 URL 列表
+        # 获取电子课本 URL 列表
         list_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json")
         list_data: list[str] = list_resp.json()["urls"].split(",")
 
-        # 获取课本列表
+        # 获取电子课本列表
         for url in list_data:
             book_resp = session.get(url)
             book_data: list[dict] = book_resp.json()
@@ -246,7 +244,7 @@ class BookHelper: # 获取网站上所有课本的数据
                     tag_paths: list[str] = book["tag_paths"][0].split("/")[2:] # 电子课本 tag_paths 的前两项为“教材”、“电子教材”
 
                     # 如果课本层级数据不在层级数据中，跳过
-                    temp_hier = self.parsed_hier[book["tag_paths"][0].split("/")[1]]
+                    temp_hier = parsed_hier[book["tag_paths"][0].split("/")[1]]
                     if not tag_paths[0] in temp_hier["children"]:
                         continue
 
@@ -257,11 +255,49 @@ class BookHelper: # 获取网站上所有课本的数据
                     if not temp_hier["children"]:
                         temp_hier["children"] = {}
 
-                    book["displayName"] = book["title"] if "title" in book else book["name"] if "name" in book else f"(未知电子教材 {book["id"]})"
+                    book["display_name"] = book["title"] if "title" in book else book["name"] if "name" in book else f"(未知电子课本 {book["id"]})"
 
                     temp_hier["children"][book["id"]] = book
 
-        return self.parsed_hier
+        return parsed_hier
+
+    def fetch_lesson_list(self): # 获取课件列表
+        # 获取课件层级数据
+        tags_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/national_lesson_tag.json")
+        tags_data = tags_resp.json()
+        parsed_hier = self.parse_hierarchy([{ "children": [{ "tag_id": "__internal_national_lesson", "hierarchies": tags_data["hierarchies"], "tag_name": "课件资源" }] }])
+
+        # 获取课件 URL 列表
+        list_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/national_lesson/teachingmaterials/version/data_version.json")
+        list_data: list[str] = list_resp.json()["urls"]
+
+        # 获取课件列表
+        for url in list_data:
+            lesson_resp = session.get(url)
+            lesson_data: list[dict] = lesson_resp.json()
+            for lesson in lesson_data:
+                if len(lesson["tag_list"]) > 0:
+                    # 解析课件层级数据
+                    tag_paths: list[str] = [tag["tag_id"] for tag in sorted(lesson["tag_list"], key=lambda tag: tag["order_num"])]
+
+                    # 分别解析课件层级
+                    temp_hier = parsed_hier["__internal_national_lesson"]
+                    for p in tag_paths:
+                        if temp_hier["children"] and temp_hier["children"].get(p):
+                            temp_hier = temp_hier["children"].get(p)
+                    if not temp_hier["children"]:
+                        temp_hier["children"] = {}
+
+                    lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson["id"]})"
+
+                    temp_hier["children"][lesson["id"]] = lesson
+
+        return parsed_hier
+    
+    def fetch_resource_list(self): # 获取资源列表
+        book_hier = self.fetch_book_list()
+        # lesson_hier = self.fetch_lesson_list() # 目前此函数代码存在问题
+        return { **book_hier }
 
 def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元组
     # 打包函数到线程
@@ -273,19 +309,19 @@ def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元�
 session = requests.Session()
 session.proxies = { "http": None, "https": None }
 
-# 获取电子课本列表
+# 获取资源列表
 try:
-    bookList = BookHelper().fetch_book_list()
+    resource_list = resource_helper().fetch_resource_list()
 except:
-    bookList = {}
-    messagebox.showwarning("警告", "获取电子课本列表失败，请手动填写电子课本链接，或重新打开本程序") # 弹出警告窗口
+    resource_list = {}
+    messagebox.showwarning("警告", "获取资源列表失败，请手动填写资源链接，或重新打开本程序") # 弹出警告窗口
 
 # GUI
 root = tk.Tk()
 
 root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
 
-root.title("国家中小学智慧教育平台 电子课本解析") # 设置窗口标题
+root.title("国家中小学智慧教育平台 资源下载工具") # 设置窗口标题
 # root.geometry("900x600") # 设置窗口大小
 
 def set_icon() -> None: # 设置窗口图标
@@ -329,15 +365,15 @@ root.protocol("WM_DELETE_WINDOW", on_closing) # 注册窗口关闭事件的处�
 container_frame = ttk.Frame(root)
 container_frame.pack(anchor="center", expand="yes", padx=int(40 * scale), pady=int(20 * scale)) # 在容器的中心位置放置，允许组件在容器中扩展，水平外边距 40，垂直外边距 40
 
-title_label = ttk.Label(container_frame, text="国家中小学智慧教育平台 电子课本解析", font=("微软雅黑", 16, "bold")) # 添加标题标签
+title_label = ttk.Label(container_frame, text="国家中小学智慧教育平台 资源下载工具", font=("微软雅黑", 16, "bold")) # 添加标题标签
 title_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
 
-description = """请在下面的文本框中输入一个或多个电子课本预览页面的网址（每个网址一行）。
-电子课本预览页面网址示例：
+description = """请在下面的文本框中输入一个或多个资源页面的网址（每个网址一行）。
+资源页面网址示例：
 https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_
 document&contentId=b8e9a3fe-dae7-49c0-86cb-d146f883fd8e
 &catalogType=tchMaterial&subCatalog=tchMaterial
-点击下面的“下载”按钮后，程序会解析并下载所有 PDF 文件。"""
+点击下面的“下载”按钮后，程序会解析并下载资源。"""
 description_label = ttk.Label(container_frame, text=description, justify="left") # 添加描述标签
 description_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
 
@@ -353,9 +389,9 @@ context_menu.add_command(label="粘贴 (Ctrl + V)", command=lambda: url_text.eve
 # 绑定右键菜单到文本框（3 代表鼠标的右键按钮）
 url_text.bind("<Button-3>", lambda event: context_menu.post(event.x_root, event.y_root))
 
-options = [["---"] + [bookList[k]["displayName"] for k in bookList], ["---"], ["---"], ["---"], ["---"], ["---"]] # 构建选择项
+options = [["---"] + [resource_list[k]["display_name"] for k in resource_list], ["---"], ["---"], ["---"], ["---"], ["---"], ["---"], ["---"]] # 构建选择项
 
-variables = [tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root)]
+variables = [tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root)]
 
 # 处理用户选择事件
 event_flag = False # 防止事件循环调用
@@ -379,30 +415,30 @@ def selection_handler(index: int, *args) -> None:
     if index < len(drops) - 1: # 更新选择项
         current_drop = drops[index + 1]
 
-        current_hier = bookList
-        current_id = [element for element in current_hier if current_hier[element]["displayName"] == variables[0].get()][0]
+        current_hier = resource_list
+        current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[0].get()][0]
         current_hier = current_hier[current_id]["children"]
 
         end_flag = False # 是否到达最终目标
         for i in range(index):
             try:
-                current_id = [element for element in current_hier if current_hier[element]["displayName"] == variables[i + 1].get()][0]
+                current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[i + 1].get()][0]
                 current_hier = current_hier[current_id]["children"]
             except KeyError: # 无法继续向下选择，说明已经到达最终目标
                 end_flag = True
                 break
 
-        if end_flag:
+        if not current_hier or end_flag:
             current_options = ["---"]
         else:
-            current_options = ["---"] + [current_hier[k]["displayName"] for k in current_hier.keys()]
+            current_options = ["---"] + [current_hier[k]["display_name"] for k in current_hier.keys()]
 
         current_drop["menu"].delete(0, "end")
         for choice in current_options:
             current_drop["menu"].add_command(label=choice, command=tk._setit(variables[index + 1], choice))
 
         if end_flag: # 到达目标，显示 URL
-            current_id = [element for element in current_hier if current_hier[element]["displayName"] == variables[index].get()][0]
+            current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[index].get()][0]
             resource_type = current_hier[current_id]["resource_type_code"] or "assets_document"
             if url_text.get("1.0", tk.END) == "\n": # URL 输入框为空的时候，插入的内容前面不加换行
                 url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
@@ -425,21 +461,21 @@ def selection_handler(index: int, *args) -> None:
         if variables[-1].get() == "---":
             return
 
-        current_hier = bookList
-        current_id = [element for element in current_hier if current_hier[element]["displayName"] == variables[0].get()][0]
+        current_hier = resource_list
+        current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[0].get()][0]
         current_hier = current_hier[current_id]["children"]
         for i in range(index - 1):
-            current_id = [element for element in current_hier if current_hier[element]["displayName"] == variables[i + 1].get()][0]
+            current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[i + 1].get()][0]
             current_hier = current_hier[current_id]["children"]
 
-        current_id = [element for element in current_hier if current_hier[element]["displayName"] == variables[index].get()][0]
+        current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[index].get()][0]
         resource_type = current_hier[current_id]["resource_type_code"] or "assets_document"
         if url_text.get("1.0", tk.END) == "\n": # URL 输入框为空的时候，插入的内容前面不加换行
             url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
         else:
             url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
 
-for index in range(6): # 绑定事件
+for index in range(8): # 绑定事件
     variables[index].trace_add("write", partial(selection_handler, index))
 
 # 添加 Container
@@ -449,11 +485,11 @@ dropdown_frame.pack(padx=int(10 * scale), pady=int(10 * scale))
 drops = []
 
 # 添加菜单栏
-for i in range(6):
-    drop = ttk.OptionMenu(dropdown_frame , variables[i] , *options[i])
+for i in range(8):
+    drop = ttk.OptionMenu(dropdown_frame, variables[i], *options[i])
     drop.config(state="active") # 配置下拉菜单为始终活跃状态，保证下拉菜单一直有形状
     drop.bind("<Leave>", lambda e: "break") # 绑定鼠标移出事件，当鼠标移出下拉菜单时，执行 lambda 函数，“break”表示中止事件传递
-    drop.grid(row=i // 3, column=i % 3, padx=int(15 * scale), pady=int(15 * scale)) # 设置位置，2 行 3 列（跟随缩放）
+    drop.grid(row=i // 4, column=i % 4, padx=int(15 * scale), pady=int(15 * scale)) # 设置位置，2 行 4 列（跟随缩放）
     variables[i].set("---")
     drops.append(drop)
 
