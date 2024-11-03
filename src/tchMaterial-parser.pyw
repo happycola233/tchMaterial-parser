@@ -30,10 +30,14 @@ else:
 
 # 在导入库的部分后添加
 root = tk.Tk()  # 创建主窗口
-root.title("国家中小学智慧教育平台 资源下载工具")  # 设置窗口标题
+root.title("国家中小学智慧教育平台 资源下载工具")
+root.minsize(int(800 * scale), int(600 * scale))  # 设置最小窗口大小
 root.withdraw()  # 暂时隐藏主窗口，直到完全加载完成
 session = requests.Session()  # 创建会话
 download_states = []  # 存储下载状态
+
+
+
 
 
 def parse(url: str) -> tuple[str, str, str] | tuple[str, str, str, list] | tuple[None, None, None]: # 解析 URL
@@ -141,12 +145,21 @@ def parse(url: str) -> tuple[str, str, str] | tuple[str, str, str, list] | tuple
 
 def download_file(url: str, save_path: str) -> None: # 下载文件
     global download_states
-    response = session.get(url, stream=True)
-    total_size = int(response.headers.get("Content-Length", 0))
-    current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": total_size, "finished": False, "failed": False }
-    download_states.append(current_state)
-
     try:
+        response = session.get(url, stream=True)
+        response.raise_for_status()  # 检查响应状态
+        
+        total_size = int(response.headers.get("Content-Length", 0))
+        current_state = {
+            "download_url": url,
+            "save_path": save_path,
+            "downloaded_size": 0,
+            "total_size": total_size,
+            "finished": False,
+            "failed": False
+        }
+        download_states.append(current_state)
+
         # 确保目标目录存在
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         
@@ -168,8 +181,10 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
 
         current_state["downloaded_size"] = current_state["total_size"]
         current_state["finished"] = True
+        
     except Exception as e:
-        print(f"下载失败: {url}\n错误信息: {str(e)}")
+        log_text.insert(tk.END, f"下载失败 {url}: {str(e)}\n")
+        log_text.see(tk.END)
         current_state["downloaded_size"], current_state["total_size"] = 0, 0
         current_state["finished"], current_state["failed"] = True, True
 
@@ -181,10 +196,12 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
         failed_urls = [state["download_url"] for state in download_states if state["failed"]]
         if len(failed_urls) > 0:
             failed_str = '\n'.join(failed_urls)
-            print(f"文件已下载到：{os.path.dirname(save_path)}/{os.path.basename(save_path)}")
-            print(f"以下链接下载失败：\n{failed_str}")
+            log_text.insert("end", f"文件已下载到：{os.path.dirname(save_path)}/{os.path.basename(save_path)}\n")
+            log_text.insert("end", f"以下链接下载失败：\n{failed_str}\n")
+            log_text.see("end")
         else:
-            print(f"文件已下载到：{os.path.dirname(save_path)}")
+            log_text.insert("end", f"文件已下载到：{os.path.dirname(save_path)}\n")
+            log_text.see("end")
 
 def format_bytes(size: float) -> str: # 格式化字节
     # 返回以 KB、MB、GB、TB 为单位的数据大小
@@ -212,10 +229,13 @@ def parse_and_copy() -> None: # 解析并复制链接
                 resource_links.append({"url": resource_url, "title": title})
 
 def download() -> None:
-    download_btn.config(state="disabled")  # 禁用下载按钮
     global download_states
-    download_states = []  # 重置下载状态列表
+    download_states = []
     
+    # 禁用下载按钮，防止重复点击
+    download_btn.config(state="disabled")
+    
+    # 检查是否有URL输入
     urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()]
     if not urls:
         messagebox.showwarning("警告", "请输入至少一个网址！")
@@ -224,38 +244,51 @@ def download() -> None:
     
     # 使用 root.after 确保在主线程中打开对话框
     def ask_directory():
-        global save_dir
         save_dir = filedialog.askdirectory()  # 选择保存目录
         if save_dir:  # 用户选择了目录
-            root.after(100, start_download)  # 延迟100ms启动下载
+            log_text.delete(1.0, tk.END)  # 清空日志
+            root.after(100, lambda: start_download(save_dir))  # 延迟100ms启动下载
         else:  # 用户取消选择
             download_btn.config(state="normal")
     
-    def start_download():
+    def start_download(save_dir):
         for url in urls:
-            result = parse(url)
-            if result is None:
-                continue
+            try:
+                log_text.insert(tk.END, f"正在解析: {url}\n")
+                log_text.see(tk.END)
                 
-            if len(result) == 4:  # 有音频资源
-                resource_url, content_id, title, audio_info = result
-                # 下载PDF
-                file_name = f"{title}.pdf"
-                save_path = os.path.join(save_dir, file_name)
-                download_file(resource_url, save_path)
-                
-                # 下载音频
-                audio_dir = os.path.join(save_dir, f"{title}_音频")
-                os.makedirs(audio_dir, exist_ok=True)
-                for audio in audio_info:
-                    # 使用音频标题作为文件名
-                    audio_path = os.path.join(audio_dir, f"{audio['title']}.mp3")
-                    download_file(audio['url'], audio_path)
-            else:  # 无音频资源
-                resource_url, content_id, title = result
-                file_name = f"{title}.pdf"
-                save_path = os.path.join(save_dir, file_name)
-                download_file(resource_url, save_path)
+                result = parse(url.strip())
+                if result[0] is None:
+                    log_text.insert(tk.END, "解析失败，请检查URL是否正确\n")
+                    continue
+                    
+                # 处理音频文件的情况
+                if len(result) == 4:  # 如果返回了音频信息
+                    resource_url, content_id, title, audio_info = result
+                    # 下载PDF
+                    save_path = os.path.join(save_dir, f"{title}.pdf")
+                    download_file(resource_url, save_path)
+                    
+                    # 创建音频文件夹
+                    audio_dir = os.path.join(save_dir, f"{title}_音频")
+                    os.makedirs(audio_dir, exist_ok=True)
+                    
+                    # 下载音频文件
+                    for audio in audio_info:
+                        audio_path = os.path.join(audio_dir, f"{audio['title']}.mp3")
+                        download_file(audio['url'], audio_path)
+                else:
+                    # 原有的PDF下载逻辑
+                    resource_url, content_id, title = result
+                    save_path = os.path.join(save_dir, f"{title}.pdf")
+                    download_file(resource_url, save_path)
+                    
+            except Exception as e:
+                log_text.insert(tk.END, f"发生错误: {str(e)}\n")
+                log_text.see(tk.END)
+        
+        # 下载完成后恢复下载按钮
+        download_btn.config(state="normal")
     
     root.after(0, ask_directory)  # 在主线程中执行对话框
 
@@ -447,6 +480,10 @@ context_menu.add_command(label="粘贴 (Ctrl + V)", command=lambda: url_text.eve
 # 绑定右键菜单到文本框（3 代表鼠标的右键按钮）
 url_text.bind("<Button-3>", lambda event: context_menu.post(event.x_root, event.y_root))
 
+
+
+
+
 options = [["---"] + [resource_list[k]["display_name"] for k in resource_list], ["---"], ["---"], ["---"], ["---"], ["---"], ["---"], ["---"]] # 构建选择项
 
 variables = [tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root)]
@@ -561,7 +598,23 @@ download_progress_bar = ttk.Progressbar(container_frame, length=(125 * scale), m
 download_progress_bar.pack(side="bottom", padx=int(40 * scale), pady=int(10 * scale), ipady=int(5 * scale)) # 设置水平外边距、垂直外边距（跟随缩放），设置进度条高度（跟随缩放）
 
 # 创建一个新标签来显示下载进度
-progress_label = ttk.Label(container_frame, text="等待下载", anchor="center") # 初始时文本为空，居中
+progress_label = ttk.Label(container_frame, text="等待下载", anchor="center")
 progress_label.pack(side="bottom", padx=int(5 * scale), pady=int(5 * scale)) # 设置水平外边距、垂直外边距（跟随缩放），设置标签高度（跟随缩放）
+
+
+# 创建日志文本框和滚动条
+log_frame = ttk.Frame(container_frame)
+log_frame.pack(after=progress_label, fill="both", expand=True)
+
+log_text = tk.Text(log_frame, height=5, width=70)
+scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=log_text.yview)
+log_text.configure(yscrollcommand=scrollbar.set)
+
+# 添加默认提示文本
+log_text.insert("1.0", "这里会显示下载和解析过程的日志信息...\n")
+
+log_text.pack(side="left", fill="both", expand=True, padx=int(10 * scale), pady=int(10 * scale))
+scrollbar.pack(side="right", fill="y")
+
 
 root.mainloop() # 开始主循环
