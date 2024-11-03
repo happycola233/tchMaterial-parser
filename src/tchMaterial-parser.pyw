@@ -384,11 +384,7 @@ class resource_helper: # 获取网站上资源的数据
         # lesson_hier = self.fetch_lesson_list() # 目前此函数代码存在问题
         return { **book_hier }
 
-def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元组
-    # 打包函数到线程
-    t = threading.Thread(target=func, args=args)
-    # t.daemon = True
-    t.start()
+
 
 # 初始化请求
 session = requests.Session()
