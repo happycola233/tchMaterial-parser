@@ -61,3 +61,6 @@
 ## 📜 许可证
 
 本项目使用 [MIT License](LICENSE) 许可证。
+
+## 💌 友情链接
+您也可以在 [ChinaTextbook](https://github.com/TapXWorld/ChinaTextbook) 项目中直接下载已归档的教材PDF。
