@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 资源下载工具 v2.3
+# 国家中小学智慧教育平台 资源下载工具 v2.4
 #   https://github.com/happycola233/tchMaterial-parser
-# 最近更新于：2024-10-03
+# 最近更新于：2025-02-22
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
 
 # 导入相关库
@@ -78,7 +78,8 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
         data = response.json()
         for item in list(data["ti_items"]):
             if item["lc_ti_format"] == "pdf": # 找到存有 PDF 链接列表的项
-                resource_url: str = item["ti_storages"][0].replace("-private", "") # 获取并构建 PDF 的 URL
+                # resource_url: str = item["ti_storages"][0].replace("-private", "") # 获取并构建 PDF 的 URL
+                resource_url: str = item["ti_storages"][0] # 获取并构建 PDF 的 URL
                 break
 
         if not resource_url:
@@ -89,7 +90,8 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
                     if resource["resource_type_code"] == "assets_document":
                         for item in list(resource["ti_items"]):
                             if item["lc_ti_format"] == "pdf":
-                                resource_url: str = item["ti_storages"][0].replace("-private", "")
+                                # resource_url: str = item["ti_storages"][0].replace("-private", "")
+                                resource_url: str = item["ti_storages"][0]
                                 break
                 if not resource_url:
                     return None, None, None
@@ -102,7 +104,7 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
 
 def download_file(url: str, save_path: str) -> None: # 下载文件
     global download_states
-    response = session.get(url, stream=True)
+    response = session.get(url, headers=headers, stream=True)
     total_size = int(response.headers.get("Content-Length", 0))
     current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": total_size, "finished": False, "failed": False }
     download_states.append(current_state)
@@ -307,6 +309,11 @@ def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元�
 
 # 初始化请求
 session = requests.Session()
+# 设置请求头部，包含认证信息
+headers = {
+    "X-ND-AUTH": 'MAC id="0",'
+                 'nonce="0",mac="0"'
+}
 session.proxies = { "http": None, "https": None }
 
 # 获取资源列表
