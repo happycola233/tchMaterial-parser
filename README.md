@@ -1,8 +1,8 @@
 # [国家中小学智慧教育平台](https://basic.smartedu.cn/tchMaterial/) 电子课本下载工具  
 
-![Python Version](https://img.shields.io/badge/Python-3.x-blue.svg)  
-![License](https://img.shields.io/badge/License-MIT-green.svg)  
-![Made With Love❤️](https://img.shields.io/badge/Made_With-%E2%9D%A4-red.svg)  
+![Python Version](https://img.shields.io/badge/Python-3.x-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Made With Love❤️](https://img.shields.io/badge/Made_With-%E2%9D%A4-red.svg)
 
 本工具可以帮助您从 **[国家中小学智慧教育平台](https://basic.smartedu.cn/tchMaterial/)** 获取电子课本的 PDF 文件网址并进行下载，让您更方便地获取课本内容。  
 
