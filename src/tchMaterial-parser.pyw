@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 资源下载工具 v2.4
-#   https://github.com/happycola233/tchMaterial-parser
-# 最近更新于：2025-02-22
+# 国家中小学智慧教育平台 资源下载工具 v3.0
+# 项目地址：https://github.com/happycola233/tchMaterial-parser
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
+# 最近更新于：2025-03-14
 
 # 导入相关库
 import tkinter as tk
@@ -14,7 +14,7 @@ import threading, requests, pyperclip, psutil
 
 os_name = platform.system() # 获取操作系统类型
 if os_name == "Windows": # 如果是 Windows 操作系统，导入 Windows 相关库
-    import win32print, win32gui, win32con, win32api, ctypes
+    import win32print, win32gui, win32con, win32api, ctypes, winreg
 
     # 高 DPI 适配
     scale: float = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
@@ -97,7 +97,6 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
                     return None, None, None
             else:
                 return None, None, None
-
         return resource_url, content_id, data["title"]
     except:
         return None, None, None # 如果解析失败，返回 None
@@ -105,6 +104,14 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
 def download_file(url: str, save_path: str) -> None: # 下载文件
     global download_states
     response = session.get(url, headers=headers, stream=True)
+
+    # 检测401
+    if response.status_code == 401:
+        messagebox.showerror("授权失败", "access_token 可能已过期或无效，请重新设置后再试！")
+        open_access_token_window()
+        download_btn.config(state="normal")  # 当弹出“设置token”窗口后，先行恢复下载按钮可用
+        return
+
     total_size = int(response.headers.get("Content-Length", 0))
     current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": total_size, "finished": False, "failed": False }
     download_states.append(current_state)
@@ -151,25 +158,6 @@ def format_bytes(size: float) -> str: # 格式化字节
         size /= 1024.0
     return f"{size:3.1f} PB"
 
-def parse_and_copy() -> None: # 解析并复制链接
-    urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()] # 获取所有非空行
-    resource_links = []
-    failed_links = []
-
-    for url in urls:
-        resource_url = parse(url)[0]
-        if not resource_url:
-            failed_links.append(url) # 添加到失败链接
-            continue
-        resource_links.append(resource_url)
-
-    if failed_links:
-        messagebox.showwarning("警告", "以下“行”无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
-
-    if resource_links:
-        pyperclip.copy("\n".join(resource_links)) # 将链接复制到剪贴板
-        messagebox.showinfo("提示", "资源链接已复制到剪贴板")
-
 def download() -> None: # 下载资源文件
     global download_states
     download_btn.config(state="disabled") # 设置下载按钮为禁用状态
@@ -214,6 +202,132 @@ def download() -> None: # 下载资源文件
 
     if not urls and not failed_links:
         download_btn.config(state="normal") # 设置下载按钮为启用状态
+
+def open_access_token_window():
+    """
+    打开新窗口供用户输入 Access Token（多行文本框），
+    并在关闭窗口时恢复“下载”按钮的可用状态。
+    """
+    token_window = tk.Toplevel(root)
+    token_window.title("设置 Access Token")
+    # 让窗口自动根据控件自适应尺寸；如需最小尺寸可用 token_window.minsize(...)
+    
+    # 当用户关闭 token_window 时，重新启用下载按钮（防止一直处于禁用状态）
+    def on_token_window_close():
+        download_btn.config(state="normal")
+        token_window.destroy()
+    token_window.protocol("WM_DELETE_WINDOW", on_token_window_close)
+
+    # 设置一个 Frame 用于留白、布局更美观
+    frame = ttk.Frame(token_window, padding=20)
+    frame.pack(fill="both", expand=True)
+
+    # 提示文本
+    label = ttk.Label(frame, text="请粘贴从浏览器获取的 Access Token：", font=("微软雅黑", 10))
+    label.pack(pady=5)
+
+    # 多行 Text 替代原先 Entry，并绑定右键菜单
+    token_text = tk.Text(frame, width=50, height=4, wrap="word")
+    token_text.pack(pady=5)
+
+    # 若已存在全局 token，则填入
+    if access_token:
+        token_text.insert("1.0", access_token)
+
+    # 创建右键菜单，支持剪切/复制/粘贴
+    token_context_menu = tk.Menu(token_text, tearoff=0)
+    token_context_menu.add_command(label="剪切 (Ctrl+X)", command=lambda: token_text.event_generate("<<Cut>>"))
+    token_context_menu.add_command(label="复制 (Ctrl+C)", command=lambda: token_text.event_generate("<<Copy>>"))
+    token_context_menu.add_command(label="粘贴 (Ctrl+V)", command=lambda: token_text.event_generate("<<Paste>>"))
+    
+    # 绑定右键点击事件
+    def show_token_menu(event):
+        token_context_menu.post(event.x_root, event.y_root)
+    token_text.bind("<Button-3>", show_token_menu)
+
+    # 按下 Enter 键即可保存 token，并“吃掉”换行事件
+    def return_save_token(event):
+        save_token()
+        return "break"
+
+    token_text.bind("<Return>", return_save_token)        # 普通回车 → 执行保存
+    token_text.bind("<Shift-Return>", lambda e: "break")  # Shift+回车也不换行，直接屏蔽
+
+    # 保存按钮
+    def save_token():
+        user_token = token_text.get("1.0", tk.END).strip()
+        if user_token:
+            set_access_token(user_token)
+            # 重新启用“下载”按钮，并提示用户
+            download_btn.config(state="normal")
+
+            # 在 Windows 上额外提示存储位置
+            if os_name == "Windows":
+                reg_pos = "HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
+                messagebox.showinfo("提示", f"Access Token 已保存！\n已写入注册表：\n{reg_pos}")
+            else:
+                messagebox.showinfo("提示", "Access Token 已保存！")
+
+            token_window.destroy()
+        else:
+            messagebox.showwarning("警告", "请输入有效的 Access Token！")
+
+    save_btn = ttk.Button(frame, text="保存", command=save_token)
+    save_btn.pack(pady=5)
+
+    # 帮助按钮
+    def show_token_help():
+        help_win = tk.Toplevel(token_window)
+        help_win.title("如何获取 Access Token")
+        help_frame = ttk.Frame(help_win, padding=20)
+        help_frame.pack(fill="both", expand=True)
+
+        help_text = """\
+自2025年02月起，国家中小学智慧教育平台需要登录后才可获取教材，因此要使用本程序下载教材，您需要在平台内登录账号（如没有需注册），然后获得登录凭据（Access Token）。本程序仅保存该凭据至本地。
+
+获取方法如下：
+请先在浏览器登录国家中小学智慧教育平台（https://auth.smartedu.cn/uias/login），然后按 F12 或 Ctrl+Shift+I 或 右键-检查（审查元素），打开开发人员工具，点击“控制台（Console）”选项卡，在里面粘贴以下代码后回车（Enter）：
+---------------------------------------------------------
+(function() {
+    let authKey = Object.keys(localStorage).find(key => key.includes("ND_UC_AUTH"));
+    if (!authKey) {
+        console.error("未找到 Access Token，请确保已登录！");
+        return;
+    }
+    let tokenData = JSON.parse(localStorage.getItem(authKey));
+    let accessToken = JSON.parse(tokenData.value).access_token;
+    console.log("%cAccess Token: ", "color: green; font-weight: bold", accessToken);
+})();
+---------------------------------------------------------
+然后在控制台输出中即可看到 Access Token。将其复制后粘贴到本程序中。"""
+
+        # 只读文本区，支持选择复制
+        txt = tk.Text(help_frame, wrap="word")
+        txt.insert("1.0", help_text)
+        txt.config(state="disabled")
+        txt.pack(fill="both", expand=True)
+
+        # 同样可给帮助文本区绑定右键菜单
+        help_menu = tk.Menu(txt, tearoff=0)
+        help_menu.add_command(label="复制 (Ctrl+C)", command=lambda: txt.event_generate("<<Copy>>"))
+        def on_help_right_click(e):
+            help_menu.post(e.x_root, e.y_root)
+        txt.bind("<Button-3>", on_help_right_click)
+
+    help_btn = ttk.Button(frame, text="如何获取？", command=show_token_help)
+    help_btn.pack(pady=5)
+
+    # 让弹窗大致居中
+    token_window.update_idletasks()
+    w = token_window.winfo_width()
+    h = token_window.winfo_height()
+    ws = token_window.winfo_screenwidth()
+    hs = token_window.winfo_screenheight()
+    x = (ws // 2) - (w // 2)
+    y = (hs // 2) - (h // 2)
+    token_window.geometry(f"{w}x{h}+{x}+{y}")
+    token_window.lift()  # 置顶可见
+
 
 class resource_helper: # 获取网站上资源的数据
     def parse_hierarchy(self, hierarchy): # 解析层级数据
@@ -310,11 +424,43 @@ def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元�
 # 初始化请求
 session = requests.Session()
 # 设置请求头部，包含认证信息
-headers = {
-    "X-ND-AUTH": 'MAC id="0",'
-                 'nonce="0",mac="0"'
-}
-session.proxies = { "http": None, "https": None }
+access_token = None
+headers = {"X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"'} # “MAC id”等同于“access_token”，“nonce”和“mac”不可缺省但无需有效
+session.proxies = { "http": None, "https": None } # 全局忽略代理
+
+# 尝试从注册表读取本地存储的 access_token（仅限Windows）
+def load_access_token_from_registry():
+    global access_token
+    if os_name == "Windows":
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser", 0, winreg.KEY_READ) as key:
+                token, _ = winreg.QueryValueEx(key, "AccessToken")
+                if token:
+                    access_token = token
+                    # 更新请求头
+                    headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
+        except:
+            pass  # 读取失败则不做处理
+
+# 将access_token写入注册表
+def save_access_token_to_registry(token: str):
+    if os_name == "Windows":
+        try:
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\tchMaterial-parser") as key:
+                winreg.SetValueEx(key, "AccessToken", 0, winreg.REG_SZ, token)
+        except:
+            pass
+
+# 设置并更新access_token
+def set_access_token(token: str):
+    global access_token, headers
+    access_token = token
+    headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
+    save_access_token_to_registry(token)
+
+# 立即尝试加载已存的access_token（如果有的话）
+load_access_token_from_registry()
+
 
 # 获取资源列表
 try:
@@ -328,7 +474,7 @@ root = tk.Tk()
 
 root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
 
-root.title("国家中小学智慧教育平台 资源下载工具") # 设置窗口标题
+root.title("国家中小学智慧教育平台 资源下载工具 v3.0") # 设置窗口标题
 # root.geometry("900x600") # 设置窗口大小
 
 def set_icon() -> None: # 设置窗口图标
@@ -375,12 +521,13 @@ container_frame.pack(anchor="center", expand="yes", padx=int(40 * scale), pady=i
 title_label = ttk.Label(container_frame, text="国家中小学智慧教育平台 资源下载工具", font=("微软雅黑", 16, "bold")) # 添加标题标签
 title_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
 
-description = """请在下面的文本框中输入一个或多个资源页面的网址（每个网址一行）。
-资源页面网址示例：
-https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_
-document&contentId=b8e9a3fe-dae7-49c0-86cb-d146f883fd8e
-&catalogType=tchMaterial&subCatalog=tchMaterial
-点击下面的“下载”按钮后，程序会解析并下载资源。"""
+description = """\
+📌 请在下面的文本框中输入一个或多个资源页面的网址（每个网址一行）。
+🔗 资源页面网址示例：
+      https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=...
+📝 您也可以直接在下方蓝色选项卡中选择教材。
+📥 点击“下载”按钮后，程序会解析并下载资源。
+⚠️ 注：如您是第一次使用本程序，请先点击“设置Token”，参照里面的说明完成设置。"""
 description_label = ttk.Label(container_frame, text=description, justify="left") # 添加描述标签
 description_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
 
@@ -482,6 +629,7 @@ def selection_handler(index: int, *args) -> None:
         else:
             url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
 
+
 for index in range(8): # 绑定事件
     variables[index].trace_add("write", partial(selection_handler, index))
 
@@ -500,16 +648,19 @@ for i in range(8):
     variables[i].set("---")
     drops.append(drop)
 
-download_btn = ttk.Button(container_frame, text="下载", command=lambda: thread_it(download)) # 添加下载按钮
-download_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale)) # 设置水平外边距、垂直外边距（跟随缩放），设置按钮高度（跟随缩放）
+# 按钮：设置 Token
+token_btn = ttk.Button(container_frame, text="设置 Token", command=open_access_token_window)
+token_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
-copy_btn = ttk.Button(container_frame, text="解析并复制", command=parse_and_copy) # 添加“解析并复制”按钮
-copy_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale)) # 设置水平外边距、垂直外边距（跟随缩放），设置按钮高度（跟随缩放）
+# 按钮：下载
+download_btn = ttk.Button(container_frame, text="下载", command=lambda: thread_it(download))
+download_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
+# 下载进度条
 download_progress_bar = ttk.Progressbar(container_frame, length=(125 * scale), mode="determinate") # 添加下载进度条
 download_progress_bar.pack(side="bottom", padx=int(40 * scale), pady=int(10 * scale), ipady=int(5 * scale)) # 设置水平外边距、垂直外边距（跟随缩放），设置进度条高度（跟随缩放）
 
-# 创建一个新标签来显示下载进度
+# 下载进度标签
 progress_label = ttk.Label(container_frame, text="等待下载", anchor="center") # 初始时文本为空，居中
 progress_label.pack(side="bottom", padx=int(5 * scale), pady=int(5 * scale)) # 设置水平外边距、垂直外边距（跟随缩放），设置标签高度（跟随缩放）
 
