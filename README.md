@@ -9,7 +9,7 @@
 
 本工具可以帮助您从[**国家中小学智慧教育平台**](https://basic.smartedu.cn/tchMaterial/)获取电子课本的 PDF 文件网址并进行下载，让您更方便地获取课本内容。
 
-> [!CAUTION]
+> [!NOTE]
 >
 > 自**2025 年 2 月**起，国家中小学智慧教育平台**需要登录**才能访问电子课本资源，用户需提供 **Access Token**（即登录凭据）才可正常使用本工具的下载功能。
 >
@@ -42,7 +42,7 @@
 yay -S tchmaterial-parser
 ```
 
-感谢 @iamzhz 制作了本工具的发行包（#26）！
+感谢 [@iamzhz](https://github.com/iamzhz) 制作了本工具的发行包（[#26](../../issues/26)）！
 
 ## 🛠️使用方法
 
@@ -58,7 +58,7 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 ### 2. 设置 Access Token🔑
 
-若是第一次使用，需点击 “**设置 Token**” 按钮，粘贴 Access Token 并保存。
+若您第一次使用本程序，需点击 “**设置 Token**” 按钮，粘贴 Access Token 并保存。
 
 1. **打开浏览器**，访问[国家中小学智慧教育平台](https://auth.smartedu.cn/uias/login)并**登录账号**。
 2. 按下 **F12** 或 **Ctrl+Shift+I**，或右键——检查（审查元素）打开**开发者工具**，选择**控制台（Console）**。
@@ -79,7 +79,7 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
   
 4. 复制控制台输出的 **Access Token**，然后在本程序中点击 “**设置 Token**” 按钮，粘贴并保存 Token。
 
-> [!CAUTION]
+> [!NOTE]
 > Access Token 可能会过期，若下载失败提示 **401 Unauthorized**，请重新获取并设置新的 Token。
 
 ### 3. 开始下载🚀
