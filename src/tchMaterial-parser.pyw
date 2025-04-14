@@ -228,6 +228,13 @@ def parse_and_copy() -> None: # 解析并复制链接
                 resource_url, content_id, title = result
                 resource_links.append({"url": resource_url, "title": title})
 
+    if failed_links:
+        messagebox.showwarning("警告", "以下“行”无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
+
+    if resource_links:
+        pyperclip.copy("\n".join([f"- {resource_link["title"]}：{resource_link["url"]}{f"\n  音频文件：\n{"\n".join([f"  - {audio_info["title"]}：{audio_info["url"]}" for audio_info in resource_link["audio_urls"]])}" if "audio_urls" in resource_link else ""}" for resource_link in resource_links])) # 将链接复制到剪贴板
+        messagebox.showinfo("提示", "资源链接已复制到剪贴板")
+
 def download() -> None:
     global download_states
     download_states = []
@@ -242,12 +249,11 @@ def download() -> None:
         download_btn.config(state="normal")
         return
     
-    # 使用 root.after 确保在主线程中打开对话框
     def ask_directory():
         save_dir = filedialog.askdirectory()  # 选择保存目录
         if save_dir:  # 用户选择了目录
             log_text.delete(1.0, tk.END)  # 清空日志
-            root.after(100, lambda: start_download(save_dir))  # 延迟100ms启动下载
+            thread_it(lambda: start_download(save_dir))
         else:  # 用户取消选择
             download_btn.config(state="normal")
     
@@ -290,7 +296,7 @@ def download() -> None:
         # 下载完成后恢复下载按钮
         download_btn.config(state="normal")
     
-    root.after(0, ask_directory)  # 在主线程中执行对话框
+    ask_directory()  # 弹出对话框
 
 def thread_it(func, *args):
     """将函数打包进线程"""
@@ -577,7 +583,7 @@ for i in range(8):
     variables[i].set("---")
     drops.append(drop)
 
-download_btn = ttk.Button(container_frame, text="下载", command=lambda: thread_it(download)) # 添加下载按钮
+download_btn = ttk.Button(container_frame, text="下载", command=download) # 添加下载按钮
 download_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale)) # 设置水平外边距、垂直外边距（跟随缩放），设置按钮高度（跟随缩放）
 
 copy_btn = ttk.Button(container_frame, text="解析并复制", command=parse_and_copy) # 添加"解析并复制"按钮
