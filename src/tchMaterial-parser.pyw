@@ -10,7 +10,7 @@ from tkinter import ttk, messagebox, filedialog
 import os, platform
 from functools import partial
 import base64, tempfile
-import threading, requests, pyperclip, psutil
+import threading, requests, psutil
 
 os_name = platform.system() # 获取操作系统类型
 if os_name == "Windows": # 如果是 Windows 操作系统，导入 Windows 相关库
@@ -264,7 +264,7 @@ def open_access_token_window():
             # 在 Windows 上额外提示存储位置
             if os_name == "Windows":
                 reg_pos = "HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
-                messagebox.showinfo("提示", f"Access Token 已保存！\n已写入注册表：\n{reg_pos}")
+                messagebox.showinfo("提示", f"Access Token 已保存！\n已写入注册表：{reg_pos}")
             else:
                 messagebox.showinfo("提示", "Access Token 已保存！")
 
@@ -289,13 +289,13 @@ def open_access_token_window():
 请先在浏览器登录国家中小学智慧教育平台（https://auth.smartedu.cn/uias/login），然后按 F12 或 Ctrl+Shift+I 或 右键-检查（审查元素），打开开发人员工具，点击“控制台（Console）”选项卡，在里面粘贴以下代码后回车（Enter）：
 ---------------------------------------------------------
 (function() {
-    let authKey = Object.keys(localStorage).find(key => key.includes("ND_UC_AUTH"));
+    const authKey = Object.keys(localStorage).find(key => key.startsWith("ND_UC_AUTH"));
     if (!authKey) {
         console.error("未找到 Access Token，请确保已登录！");
         return;
     }
-    let tokenData = JSON.parse(localStorage.getItem(authKey));
-    let accessToken = JSON.parse(tokenData.value).access_token;
+    const tokenData = JSON.parse(localStorage.getItem(authKey));
+    const accessToken = JSON.parse(tokenData.value).access_token;
     console.log("%cAccess Token: ", "color: green; font-weight: bold", accessToken);
 })();
 ---------------------------------------------------------
@@ -425,7 +425,7 @@ def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元�
 session = requests.Session()
 # 设置请求头部，包含认证信息
 access_token = None
-headers = {"X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"'} # “MAC id”等同于“access_token”，“nonce”和“mac”不可缺省但无需有效
+headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # “MAC id”等同于“access_token”，“nonce”和“mac”不可缺省但无需有效
 session.proxies = { "http": None, "https": None } # 全局忽略代理
 
 # 尝试从注册表读取本地存储的 access_token（仅限Windows）
@@ -653,7 +653,7 @@ token_btn = ttk.Button(container_frame, text="设置 Token", command=open_access
 token_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
 # 按钮：下载
-download_btn = ttk.Button(container_frame, text="下载", command=lambda: thread_it(download))
+download_btn = ttk.Button(container_frame, text="下载", command=download)
 download_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
 # 下载进度条
