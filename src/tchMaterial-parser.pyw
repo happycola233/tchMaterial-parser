@@ -11,6 +11,7 @@ import os, platform
 from functools import partial
 import base64, tempfile
 import threading, requests, psutil
+import json
 
 os_name = platform.system() # 获取操作系统类型
 if os_name == "Windows": # 如果是 Windows 操作系统，导入 Windows 相关库
@@ -261,10 +262,13 @@ def open_access_token_window():
             # 重新启用“下载”按钮，并提示用户
             download_btn.config(state="normal")
 
-            # 在 Windows 上额外提示存储位置
+            # 在 Windows & Linux 上额外提示存储位置
             if os_name == "Windows":
                 reg_pos = "HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
                 messagebox.showinfo("提示", f"Access Token 已保存！\n已写入注册表：{reg_pos}")
+            elif os_name == "Linux":
+                file_path = "~/.tchMaterial-parser/data.json"
+                messagebox.showinfo("提示", f"Access Token 已保存！\n已写入文件：{file_path}")
             else:
                 messagebox.showinfo("提示", "Access Token 已保存！")
 
@@ -442,6 +446,25 @@ def load_access_token_from_registry():
         except:
             pass  # 读取失败则不做处理
 
+# 尝试从Linux系统的 ~/.tchMaterial-parser/data.json 文件加载 access_token
+def load_access_token_in_inux():
+    global access_token
+    try:
+        # 构建文件路径
+        target_file = os.path.join(os.path.expanduser("~"), 
+                                 ".tchMaterial-parser", 
+                                 "data.json")
+        # 检查文件是否存在
+        if not os.path.exists(target_file):
+            return   # 文件不存在不做处理
+        # 读取JSON文件
+        with open(target_file, 'r') as f:
+            data = json.load(f)
+        # 提取access_token字段
+        access_token = data["access_token"]
+    except:
+        pass
+
 # 将access_token写入注册表
 def save_access_token_to_registry(token: str):
     if os_name == "Windows":
@@ -451,15 +474,40 @@ def save_access_token_to_registry(token: str):
         except:
             pass
 
+# 将access_token保存到 Linux 系统的 ~/.tchMaterial-parser/data.json 文件中
+def save_access_token_in_linux(token: str):
+    try:
+        # 获取用户主目录路径
+        home_dir = os.path.expanduser("~")
+        # 构建目标目录和文件路径
+        target_dir = os.path.join(home_dir, ".tchMaterial-parser")
+        target_file = os.path.join(target_dir, "data.json")
+        # 创建目录（如果不存在）
+        os.makedirs(target_dir, exist_ok=True)
+        # 构建要保存的数据字典
+        data = {"access_token": token}
+        # 写入JSON文件
+        with open(target_file, 'w') as f:
+            json.dump(data, f, indent=4)
+    except:
+        pass
+
+
 # 设置并更新access_token
 def set_access_token(token: str):
     global access_token, headers
     access_token = token
     headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
-    save_access_token_to_registry(token)
+    if os_name == "Windows":
+        save_access_token_to_registry(token)
+    elif os_name == "Linux":
+        save_access_token_in_linux(token)
 
 # 立即尝试加载已存的access_token（如果有的话）
-load_access_token_from_registry()
+if os_name == "Windows":
+    load_access_token_from_registry()
+elif os_name == "Linux":
+    load_access_token_in_inux()
 
 
 # 获取资源列表
