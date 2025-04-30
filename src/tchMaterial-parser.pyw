@@ -447,7 +447,7 @@ def load_access_token_from_registry():
             pass  # 读取失败则不做处理
 
 # 尝试从Linux系统的 ~/.tchMaterial-parser/data.json 文件加载 access_token
-def load_access_token_in_inux():
+def load_access_token_on_linux():
     global access_token
     try:
         # 构建文件路径
@@ -475,7 +475,7 @@ def save_access_token_to_registry(token: str):
             pass
 
 # 将access_token保存到 Linux 系统的 ~/.tchMaterial-parser/data.json 文件中
-def save_access_token_in_linux(token: str):
+def save_access_token_on_linux(token: str):
     try:
         # 获取用户主目录路径
         home_dir = os.path.expanduser("~")
@@ -501,13 +501,13 @@ def set_access_token(token: str):
     if os_name == "Windows":
         save_access_token_to_registry(token)
     elif os_name == "Linux":
-        save_access_token_in_linux(token)
+        save_access_token_on_linux(token)
 
 # 立即尝试加载已存的access_token（如果有的话）
 if os_name == "Windows":
     load_access_token_from_registry()
 elif os_name == "Linux":
-    load_access_token_in_inux()
+    load_access_token_on_linux()
 
 
 # 获取资源列表
