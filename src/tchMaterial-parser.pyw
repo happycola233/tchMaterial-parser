@@ -267,7 +267,7 @@ def open_access_token_window():
                 reg_pos = "HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
                 messagebox.showinfo("提示", f"Access Token 已保存！\n已写入注册表：{reg_pos}")
             elif os_name == "Linux":
-                file_path = "~/.tchMaterial-parser/data.json"
+                file_path = "~/.config/tchMaterial-parser/data.json"
                 messagebox.showinfo("提示", f"Access Token 已保存！\n已写入文件：{file_path}")
             else:
                 messagebox.showinfo("提示", "Access Token 已保存！")
@@ -446,21 +446,24 @@ def load_access_token_from_registry():
         except:
             pass  # 读取失败则不做处理
 
-# 尝试从Linux系统的 ~/.tchMaterial-parser/data.json 文件加载 access_token
+# 尝试从Linux系统的 ~/.config/tchMaterial-parser/data.json 文件加载 access_token
 def load_access_token_on_linux():
     global access_token
     try:
         # 构建文件路径
-        target_file = os.path.join(os.path.expanduser("~"), 
-                                 ".tchMaterial-parser", 
-                                 "data.json")
+        target_file = os.path.join(
+            os.path.expanduser("~"), 
+            ".config",
+            "tchMaterial-parser", 
+            "data.json"
+        )
         # 检查文件是否存在
         if not os.path.exists(target_file):
             return   # 文件不存在不做处理
         # 读取JSON文件
         with open(target_file, 'r') as f:
             data = json.load(f)
-        # 提取access_token字段
+        # 提取 access_token 字段
         access_token = data["access_token"]
     except:
         pass
@@ -474,13 +477,17 @@ def save_access_token_to_registry(token: str):
         except:
             pass
 
-# 将access_token保存到 Linux 系统的 ~/.tchMaterial-parser/data.json 文件中
+# 将access_token保存到 Linux 系统的 ~/.config/tchMaterial-parser/data.json 文件中
 def save_access_token_on_linux(token: str):
     try:
         # 获取用户主目录路径
         home_dir = os.path.expanduser("~")
         # 构建目标目录和文件路径
-        target_dir = os.path.join(home_dir, ".tchMaterial-parser")
+        target_dir = os.path.join(
+            home_dir, 
+            ".config",  # 新增的目录层级
+            "tchMaterial-parser"
+        )
         target_file = os.path.join(target_dir, "data.json")
         # 创建目录（如果不存在）
         os.makedirs(target_dir, exist_ok=True)
