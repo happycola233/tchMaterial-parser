@@ -99,7 +99,8 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 ### 2. Access Token 保存在哪里？💾
 
 - **Windows 操作系统**：Token 会存储在**注册表** `HKEY_CURRENT_USER\Software\tchMaterial-parser` 项中的 `AccessToken` 值。
-- **Linux/macOS 等操作系统**：Token 仅在运行时临时存储于内存，不会自动保存，程序重启后需重新输入，目前我们正在努力改进该功能。
+- **Linux 操作系统**: Token 会存储在 `~/.config/tchMaterial-parser/data.json` 的文件中。
+- **macOS 等操作系统**：Token 仅在运行时临时存储于内存，不会自动保存，程序重启后需重新输入，目前我们正在努力改进该功能。
 
 ### 3. Token 会不会泄露？🔐
 
