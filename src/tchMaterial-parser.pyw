@@ -8,6 +8,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os, platform
+import sys
 from functools import partial
 import base64, tempfile
 import threading, requests, psutil
@@ -562,10 +563,7 @@ def on_closing() -> None: # 处理窗口关闭事件
             pass
 
     # 结束自身进程
-    try:
-        current_process.terminate()
-    except: # 进程可能已经结束
-        pass
+    sys.exit(0)
 
 root.protocol("WM_DELETE_WINDOW", on_closing) # 注册窗口关闭事件的处理函数
 
