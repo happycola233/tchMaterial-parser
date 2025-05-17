@@ -8,11 +8,14 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os, platform
+import sys
 from functools import partial
 import base64, tempfile
 import threading, requests, psutil
+import json
 
 os_name = platform.system() # 获取操作系统类型
+
 if os_name == "Windows": # 如果是 Windows 操作系统，导入 Windows 相关库
     import win32print, win32gui, win32con, win32api, ctypes, winreg
 
@@ -255,18 +258,14 @@ def open_access_token_window():
 
     # 保存按钮
     def save_token():
+        global tip_info
         user_token = token_text.get("1.0", tk.END).strip()
         if user_token:
             set_access_token(user_token)
             # 重新启用“下载”按钮，并提示用户
             download_btn.config(state="normal")
-
-            # 在 Windows 上额外提示存储位置
-            if os_name == "Windows":
-                reg_pos = "HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
-                messagebox.showinfo("提示", f"Access Token 已保存！\n已写入注册表：{reg_pos}")
-            else:
-                messagebox.showinfo("提示", "Access Token 已保存！")
+            # 显示提示
+            messagebox.showinfo("提示", tip_info)
 
             token_window.destroy()
         else:
@@ -431,36 +430,96 @@ session.proxies = { "http": None, "https": None } # 全局忽略代理
 # 尝试从注册表读取本地存储的 access_token（仅限Windows）
 def load_access_token_from_registry():
     global access_token
-    if os_name == "Windows":
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser", 0, winreg.KEY_READ) as key:
-                token, _ = winreg.QueryValueEx(key, "AccessToken")
-                if token:
-                    access_token = token
-                    # 更新请求头
-                    headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
-        except:
-            pass  # 读取失败则不做处理
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser", 0, winreg.KEY_READ) as key:
+            token, _ = winreg.QueryValueEx(key, "AccessToken")
+            if token:
+                access_token = token
+                # 更新请求头
+                headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
+    except:
+        pass  # 读取失败则不做处理
+
+# 尝试从Linux系统的 ~/.config/tchMaterial-parser/data.json 文件加载 access_token
+def load_access_token_on_linux():
+    global access_token
+    try:
+        # 构建文件路径
+        target_file = os.path.join(
+            os.path.expanduser("~"), 
+            ".config",
+            "tchMaterial-parser", 
+            "data.json"
+        )
+        # 检查文件是否存在
+        if not os.path.exists(target_file):
+            return   # 文件不存在不做处理
+        # 读取JSON文件
+        with open(target_file, 'r') as f:
+            data = json.load(f)
+        # 提取 access_token 字段
+        access_token = data["access_token"]
+    except:
+        pass
 
 # 将access_token写入注册表
 def save_access_token_to_registry(token: str):
-    if os_name == "Windows":
-        try:
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\tchMaterial-parser") as key:
-                winreg.SetValueEx(key, "AccessToken", 0, winreg.REG_SZ, token)
-        except:
-            pass
+    try:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\tchMaterial-parser") as key:
+            winreg.SetValueEx(key, "AccessToken", 0, winreg.REG_SZ, token)
+    except:
+        pass
+
+# 将access_token保存到 Linux 系统的 ~/.config/tchMaterial-parser/data.json 文件中
+def save_access_token_on_linux(token: str):
+    try:
+        # 获取用户主目录路径
+        home_dir = os.path.expanduser("~")
+        # 构建目标目录和文件路径
+        target_dir = os.path.join(
+            home_dir, 
+            ".config",  # 新增的目录层级
+            "tchMaterial-parser"
+        )
+        target_file = os.path.join(target_dir, "data.json")
+        # 创建目录（如果不存在）
+        os.makedirs(target_dir, exist_ok=True)
+        # 构建要保存的数据字典
+        data = {"access_token": token}
+        # 写入JSON文件
+        with open(target_file, 'w') as f:
+            json.dump(data, f, indent=4)
+    except:
+        pass
+
 
 # 设置并更新access_token
 def set_access_token(token: str):
     global access_token, headers
     access_token = token
     headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
-    save_access_token_to_registry(token)
+    save_access_token(token)
+
+if os_name == "Windows":
+    load_access_token = load_access_token_from_registry
+    save_access_token = save_access_token_to_registry
+    # 在 Windows 上额外提示存储位置
+    reg_pos = "HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
+    tip_info = f"Access Token 已保存！\n已写入注册表：{reg_pos}"
+elif os_name == "Linux":
+    load_access_token = load_access_token_on_linux
+    save_access_token = save_access_token_on_linux
+    # 在 Linux 上额外提示存储位置
+    file_path = "~/.config/tchMaterial-parser/data.json"
+    tip_info = f"Access Token 已保存！\n已写入文件：{file_path}"
+else:
+    # 在其他操作系统上 load/save access_token 什么也不做
+    load_access_token = lambda : 0
+    save_access_token = lambda token : 0
+    tip_info = "Access Token 已保存！"
 
 # 立即尝试加载已存的access_token（如果有的话）
-load_access_token_from_registry()
-
+load_access_token()
 
 # 获取资源列表
 try:
@@ -507,10 +566,7 @@ def on_closing() -> None: # 处理窗口关闭事件
             pass
 
     # 结束自身进程
-    try:
-        current_process.terminate()
-    except: # 进程可能已经结束
-        pass
+    sys.exit(0)
 
 root.protocol("WM_DELETE_WINDOW", on_closing) # 注册窗口关闭事件的处理函数
 
