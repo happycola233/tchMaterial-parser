@@ -10,7 +10,7 @@ from tkinter import ttk, messagebox, filedialog
 import os, platform
 import sys
 from functools import partial
-import base64, tempfile
+import base64, tempfile, pyperclip
 import threading, requests, psutil
 import json, re
 
@@ -61,7 +61,7 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
         """
         # 其中 $.ti_items 的每一项对应一个资源
 
-        if re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对于“基础性作业”的解析
+        if re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对于 “基础性作业” 的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
         else: # 对于课本的解析
             if content_type == "thematic_course": # 对专题课程（含电子课本、视频等）的解析
@@ -105,8 +105,8 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
     # 服务器返回 401 或 403 状态码
     if response.status_code == 401 or response.status_code == 403:
         messagebox.showerror("授权失败", "Access Token 可能已过期或无效，请重新设置后再试！")
-        open_access_token_window()
-        download_btn.config(state="normal") # 当弹出 “设置 token” 窗口后，恢复下载按钮
+        show_access_token_window()
+        download_btn.config(state="normal") # 当弹出 “设置 Token” 窗口后，恢复下载按钮
         return
     if response.status_code >= 400:
         messagebox.showerror("下载失败", f"下载失败，服务器返回状态码：{response.status_code}")
@@ -158,6 +158,25 @@ def format_bytes(size: float) -> str: # 将数据单位进行格式化，返回�
         size /= 1024.0
     return f"{size:3.1f} PB"
 
+def parse_and_copy() -> None: # 解析并复制链接
+    urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()] # 获取所有非空行
+    resource_links = []
+    failed_links = []
+
+    for url in urls:
+        resource_url = parse(url)[0]
+        if not resource_url:
+            failed_links.append(url) # 添加到失败链接
+            continue
+        resource_links.append(resource_url)
+
+    if failed_links:
+        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
+
+    if resource_links:
+        pyperclip.copy("\n".join(resource_links)) # 将链接复制到剪贴板
+        messagebox.showinfo("提示", "资源链接已复制到剪贴板")
+
 def download() -> None: # 下载资源文件
     global download_states
     download_btn.config(state="disabled") # 设置下载按钮为禁用状态
@@ -197,18 +216,20 @@ def download() -> None: # 下载资源文件
         thread_it(download_file, (resource_url, save_path)) # 开始下载（多线程，防止窗口卡死）
 
     if failed_links:
-        messagebox.showwarning("警告", "以下“行”无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
+        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
         download_btn.config(state="normal") # 设置下载按钮为启用状态
 
     if not urls and not failed_links:
         download_btn.config(state="normal") # 设置下载按钮为启用状态
 
-def open_access_token_window() -> None: # 打开输入 Access Token 的窗口
+def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_window = tk.Toplevel(root)
     token_window.title("设置 Access Token")
     # 让窗口自动根据控件自适应尺寸；如需最小尺寸可用 token_window.minsize(...)
 
-    token_window.protocol("WM_DELETE_WINDOW", lambda: token_window.destroy())
+    token_window.focus_force() # 自动获得焦点
+    token_window.grab_set() # 阻止主窗口操作
+    token_window.bind("<Escape>", lambda event: token_window.destroy()) # 绑定 Esc 键关闭窗口
 
     # 设置一个 Frame 用于留白、布局更美观
     frame = ttk.Frame(token_window, padding=20)
@@ -252,7 +273,7 @@ def open_access_token_window() -> None: # 打开输入 Access Token 的窗口
     def save_token():
         user_token = token_text.get("1.0", tk.END).strip()
         tip_info = set_access_token(user_token)
-        # 重新启用“下载”按钮，并提示用户
+        # 重新启用下载按钮，并提示用户
         download_btn.config(state="normal")
         # 显示提示
         messagebox.showinfo("提示", tip_info)
@@ -266,14 +287,21 @@ def open_access_token_window() -> None: # 打开输入 Access Token 的窗口
     def show_token_help():
         help_win = tk.Toplevel(token_window)
         help_win.title("获取 Access Token 方法")
+
+        help_win.focus_force() # 自动获得焦点
+        help_win.grab_set() # 阻止主窗口操作
+        help_win.bind("<Escape>", lambda event: help_win.destroy()) # 绑定 Esc 键关闭窗口
+
         help_frame = ttk.Frame(help_win, padding=20)
         help_frame.pack(fill="both", expand=True)
 
         help_text = """\
-自 2025 年 2 月起，国家中小学智慧教育平台需要登录后才可获取教材，因此要使用本程序下载教材，您需要在平台内登录账号（如没有需注册），然后获得登录凭据（Access Token）。本程序仅保存该凭据至本地。
+国家中小学智慧教育平台需要登录后才可获取教材，因此要使用本程序下载教材，您需要在平台内登录账号（如没有需注册），然后获得登录凭据（Access Token）。本程序仅保存该凭据至本地。
 
 获取方法如下：
-请先在浏览器登录国家中小学智慧教育平台（https://auth.smartedu.cn/uias/login），然后按 F12 或 Ctrl+Shift+I 或 右键-检查（审查元素），打开开发人员工具，点击“控制台（Console）”选项卡，在里面粘贴以下代码后回车（Enter）：
+1. 打开浏览器，访问国家中小学智慧教育平台（https://auth.smartedu.cn/uias/login）并登录账号。
+2. 按下 F12 或 Ctrl+Shift+I，或右键——检查（审查元素）打开开发者工具，选择控制台（Console）。
+3. 在控制台粘贴以下代码后回车（Enter）：
 ---------------------------------------------------------
 (function() {
     const authKey = Object.keys(localStorage).find(key => key.startsWith("ND_UC_AUTH"));
@@ -307,7 +335,7 @@ def open_access_token_window() -> None: # 打开输入 Access Token 的窗口
     help_btn = ttk.Button(frame, text="如何获取？", command=show_token_help)
     help_btn.pack(pady=5)
 
-    # 让弹窗大致居中
+    # 让弹窗居中
     token_window.update_idletasks()
     w = token_window.winfo_width()
     h = token_window.winfo_height()
@@ -412,6 +440,8 @@ def thread_it(func, args: tuple = ()) -> None: # args 为元组，且默认值�
 
 # 初始化请求
 session = requests.Session()
+# 初始化下载状态
+download_states = []
 # 设置请求头部，包含认证信息
 access_token = None
 headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # “MAC id”等同于“access_token”，“nonce”和“mac”不可缺省但无需有效
@@ -532,6 +562,10 @@ def set_icon() -> None: # 设置窗口图标
 thread_it(set_icon) # 设置窗口图标耗时较长，为不影响窗口绘制，采用多线程
 
 def on_closing() -> None: # 处理窗口关闭事件
+    if not all(state["finished"] for state in download_states): # 当正在下载时，询问用户
+        if not messagebox.askokcancel("提示", "下载任务未完成，是否退出？"):
+            return
+
     current_process = psutil.Process(os.getpid()) # 获取自身的进程 ID
     child_processes = current_process.children(recursive=True) # 获取自身的所有子进程
 
@@ -687,12 +721,16 @@ for i in range(8):
     drops.append(drop)
 
 # 按钮：设置 Token
-token_btn = ttk.Button(container_frame, text="设置 Token", command=open_access_token_window)
+token_btn = ttk.Button(container_frame, text="设置 Token", command=show_access_token_window)
 token_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
 # 按钮：下载
 download_btn = ttk.Button(container_frame, text="下载", command=download)
 download_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+
+# 按钮：解析并复制
+copy_btn = ttk.Button(container_frame, text="解析并复制", command=parse_and_copy)
+copy_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
 # 下载进度条
 download_progress_bar = ttk.Progressbar(container_frame, length=(125 * scale), mode="determinate") # 添加下载进度条
