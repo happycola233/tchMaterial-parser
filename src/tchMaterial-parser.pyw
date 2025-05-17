@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 资源下载工具 v3.0
+# 国家中小学智慧教育平台 资源下载工具 v3.1
 # 项目地址：https://github.com/happycola233/tchMaterial-parser
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
-# 最近更新于：2025-03-14
+# 最近更新于：2025-05-18
 
 # 导入相关库
 import tkinter as tk
@@ -12,23 +12,12 @@ import sys
 from functools import partial
 import base64, tempfile
 import threading, requests, psutil
-import json
+import json, re
 
 os_name = platform.system() # 获取操作系统类型
 
 if os_name == "Windows": # 如果是 Windows 操作系统，导入 Windows 相关库
     import win32print, win32gui, win32con, win32api, ctypes, winreg
-
-    # 高 DPI 适配
-    scale: float = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
-
-    # 调用 API 设置成由应用程序缩放
-    try: # Windows 8.1 或更新
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    except: # Windows 8 或更老
-        ctypes.windll.user32.SetProcessDPIAware()
-else:
-    scale = 1.0
 
 def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 URL
     try:
@@ -39,6 +28,8 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
             if q.split("=")[0] == "contentId":
                 content_id = q.split("=")[1]
                 break
+        if not content_id:
+            return None, None, None
 
         for q in url[url.find("?") + 1:].split("&"):
             if q.split("=")[0] == "contentType":
@@ -70,19 +61,20 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
         """
         # 其中 $.ti_items 的每一项对应一个资源
 
-        if "syncClassroom/basicWork/detail" in url: # 对于“基础性作业”的解析
+        if re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对于“基础性作业”的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
         else: # 对于课本的解析
             if content_type == "thematic_course": # 对专题课程（含电子课本、视频等）的解析
                 response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
             else: # 对普通电子课本的解析
                 response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
-        
+
         data = response.json()
         for item in list(data["ti_items"]):
             if item["lc_ti_format"] == "pdf": # 找到存有 PDF 链接列表的项
-                # resource_url: str = item["ti_storages"][0].replace("-private", "") # 获取并构建 PDF 的 URL
-                resource_url: str = item["ti_storages"][0] # 获取并构建 PDF 的 URL
+                resource_url: str = item["ti_storages"][0] # 获取并构造 PDF 的 URL
+                if not access_token: # 未登录时，通过一个不可靠的方法构造可直接下载的 URL
+                    resource_url = re.sub(r"^https?://(.+)-private.ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}).pkg/(?:.+)\.pdf$", r"https://\1.ykt.cbern.com.cn/\2/\3.pkg/pdf.pdf", resource_url)
                 break
 
         if not resource_url:
@@ -93,26 +85,32 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
                     if resource["resource_type_code"] == "assets_document":
                         for item in list(resource["ti_items"]):
                             if item["lc_ti_format"] == "pdf":
-                                # resource_url: str = item["ti_storages"][0].replace("-private", "")
                                 resource_url: str = item["ti_storages"][0]
+                                if not access_token:
+                                    resource_url = re.sub(r"^https?://(.+)-private.ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}).pkg/(?:.+)\.pdf$", r"https://\1.ykt.cbern.com.cn/\2/\3.pkg/pdf.pdf", resource_url)
                                 break
                 if not resource_url:
                     return None, None, None
             else:
                 return None, None, None
+
         return resource_url, content_id, data["title"]
-    except:
+    except Exception:
         return None, None, None # 如果解析失败，返回 None
 
 def download_file(url: str, save_path: str) -> None: # 下载文件
     global download_states
     response = session.get(url, headers=headers, stream=True)
 
-    # 检测401
-    if response.status_code == 401:
-        messagebox.showerror("授权失败", "access_token 可能已过期或无效，请重新设置后再试！")
+    # 服务器返回 401 或 403 状态码
+    if response.status_code == 401 or response.status_code == 403:
+        messagebox.showerror("授权失败", "Access Token 可能已过期或无效，请重新设置后再试！")
         open_access_token_window()
-        download_btn.config(state="normal")  # 当弹出“设置token”窗口后，先行恢复下载按钮可用
+        download_btn.config(state="normal") # 当弹出 “设置 token” 窗口后，恢复下载按钮
+        return
+    if response.status_code >= 400:
+        messagebox.showerror("下载失败", f"下载失败，服务器返回状态码：{response.status_code}")
+        download_btn.config(state="normal")
         return
 
     total_size = int(response.headers.get("Content-Length", 0))
@@ -138,7 +136,7 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
 
         current_state["downloaded_size"] = current_state["total_size"]
         current_state["finished"] = True
-    except:
+    except Exception:
         current_state["downloaded_size"], current_state["total_size"] = 0, 0
         current_state["finished"], current_state["failed"] = True, True
 
@@ -153,8 +151,7 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
         else:
             messagebox.showinfo("下载完成", f"文件已下载到：{os.path.dirname(save_path)}") # 显示完成对话框
 
-def format_bytes(size: float) -> str: # 格式化字节
-    # 返回以 KB、MB、GB、TB 为单位的数据大小
+def format_bytes(size: float) -> str: # 将数据单位进行格式化，返回以 KB、MB、GB、TB 为单位的数据大小
     for x in ["字节", "KB", "MB", "GB", "TB"]:
         if size < 1024.0:
             return f"{size:3.1f} {x}"
@@ -206,20 +203,12 @@ def download() -> None: # 下载资源文件
     if not urls and not failed_links:
         download_btn.config(state="normal") # 设置下载按钮为启用状态
 
-def open_access_token_window():
-    """
-    打开新窗口供用户输入 Access Token（多行文本框），
-    并在关闭窗口时恢复“下载”按钮的可用状态。
-    """
+def open_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_window = tk.Toplevel(root)
     token_window.title("设置 Access Token")
     # 让窗口自动根据控件自适应尺寸；如需最小尺寸可用 token_window.minsize(...)
-    
-    # 当用户关闭 token_window 时，重新启用下载按钮（防止一直处于禁用状态）
-    def on_token_window_close():
-        download_btn.config(state="normal")
-        token_window.destroy()
-    token_window.protocol("WM_DELETE_WINDOW", on_token_window_close)
+
+    token_window.protocol("WM_DELETE_WINDOW", lambda: token_window.destroy())
 
     # 设置一个 Frame 用于留白、布局更美观
     frame = ttk.Frame(token_window, padding=20)
@@ -230,46 +219,45 @@ def open_access_token_window():
     label.pack(pady=5)
 
     # 多行 Text 替代原先 Entry，并绑定右键菜单
-    token_text = tk.Text(frame, width=50, height=4, wrap="word")
+    token_text = tk.Text(frame, width=50, height=4, wrap="word", font=("微软雅黑", 9))
     token_text.pack(pady=5)
 
     # 若已存在全局 token，则填入
     if access_token:
         token_text.insert("1.0", access_token)
 
-    # 创建右键菜单，支持剪切/复制/粘贴
+    # 创建右键菜单，支持剪切、复制、粘贴
     token_context_menu = tk.Menu(token_text, tearoff=0)
-    token_context_menu.add_command(label="剪切 (Ctrl+X)", command=lambda: token_text.event_generate("<<Cut>>"))
-    token_context_menu.add_command(label="复制 (Ctrl+C)", command=lambda: token_text.event_generate("<<Copy>>"))
-    token_context_menu.add_command(label="粘贴 (Ctrl+V)", command=lambda: token_text.event_generate("<<Paste>>"))
-    
+    token_context_menu.add_command(label="剪切 (Ctrl＋X)", command=lambda: token_text.event_generate("<<Cut>>"))
+    token_context_menu.add_command(label="复制 (Ctrl＋C)", command=lambda: token_text.event_generate("<<Copy>>"))
+    token_context_menu.add_command(label="粘贴 (Ctrl＋V)", command=lambda: token_text.event_generate("<<Paste>>"))
+
     # 绑定右键点击事件
     def show_token_menu(event):
         token_context_menu.post(event.x_root, event.y_root)
+        token_context_menu.bind("<FocusOut>", lambda e: token_context_menu.unpost())
+        root.bind("<Button-1>", lambda e: token_context_menu.unpost(), add="+")
+
     token_text.bind("<Button-3>", show_token_menu)
 
-    # 按下 Enter 键即可保存 token，并“吃掉”换行事件
+    # 按下 Enter 键即可保存 token，并屏蔽换行事件
     def return_save_token(event):
         save_token()
         return "break"
 
-    token_text.bind("<Return>", return_save_token)        # 普通回车 → 执行保存
-    token_text.bind("<Shift-Return>", lambda e: "break")  # Shift+回车也不换行，直接屏蔽
+    token_text.bind("<Return>", return_save_token) # 按下 Enter 键，保存 Access Token
+    token_text.bind("<Shift-Return>", lambda e: "break") # 按下 Shift＋Enter 也不换行，直接屏蔽
 
     # 保存按钮
     def save_token():
-        global tip_info
         user_token = token_text.get("1.0", tk.END).strip()
-        if user_token:
-            set_access_token(user_token)
-            # 重新启用“下载”按钮，并提示用户
-            download_btn.config(state="normal")
-            # 显示提示
-            messagebox.showinfo("提示", tip_info)
+        tip_info = set_access_token(user_token)
+        # 重新启用“下载”按钮，并提示用户
+        download_btn.config(state="normal")
+        # 显示提示
+        messagebox.showinfo("提示", tip_info)
 
-            token_window.destroy()
-        else:
-            messagebox.showwarning("警告", "请输入有效的 Access Token！")
+        token_window.destroy()
 
     save_btn = ttk.Button(frame, text="保存", command=save_token)
     save_btn.pack(pady=5)
@@ -277,12 +265,12 @@ def open_access_token_window():
     # 帮助按钮
     def show_token_help():
         help_win = tk.Toplevel(token_window)
-        help_win.title("如何获取 Access Token")
+        help_win.title("获取 Access Token 方法")
         help_frame = ttk.Frame(help_win, padding=20)
         help_frame.pack(fill="both", expand=True)
 
         help_text = """\
-自2025年02月起，国家中小学智慧教育平台需要登录后才可获取教材，因此要使用本程序下载教材，您需要在平台内登录账号（如没有需注册），然后获得登录凭据（Access Token）。本程序仅保存该凭据至本地。
+自 2025 年 2 月起，国家中小学智慧教育平台需要登录后才可获取教材，因此要使用本程序下载教材，您需要在平台内登录账号（如没有需注册），然后获得登录凭据（Access Token）。本程序仅保存该凭据至本地。
 
 获取方法如下：
 请先在浏览器登录国家中小学智慧教育平台（https://auth.smartedu.cn/uias/login），然后按 F12 或 Ctrl+Shift+I 或 右键-检查（审查元素），打开开发人员工具，点击“控制台（Console）”选项卡，在里面粘贴以下代码后回车（Enter）：
@@ -295,23 +283,26 @@ def open_access_token_window():
     }
     const tokenData = JSON.parse(localStorage.getItem(authKey));
     const accessToken = JSON.parse(tokenData.value).access_token;
-    console.log("%cAccess Token: ", "color: green; font-weight: bold", accessToken);
+    console.log("%cAccess Token:", "color: green; font-weight: bold", accessToken);
 })();
 ---------------------------------------------------------
 然后在控制台输出中即可看到 Access Token。将其复制后粘贴到本程序中。"""
 
         # 只读文本区，支持选择复制
-        txt = tk.Text(help_frame, wrap="word")
+        txt = tk.Text(help_frame, wrap="word", font=("微软雅黑", 9))
         txt.insert("1.0", help_text)
         txt.config(state="disabled")
         txt.pack(fill="both", expand=True)
 
         # 同样可给帮助文本区绑定右键菜单
         help_menu = tk.Menu(txt, tearoff=0)
-        help_menu.add_command(label="复制 (Ctrl+C)", command=lambda: txt.event_generate("<<Copy>>"))
-        def on_help_right_click(e):
-            help_menu.post(e.x_root, e.y_root)
-        txt.bind("<Button-3>", on_help_right_click)
+        help_menu.add_command(label="复制 (Ctrl＋C)", command=lambda: txt.event_generate("<<Copy>>"))
+        def show_help_menu(event):
+            help_menu.post(event.x_root, event.y_root)
+            help_menu.bind("<FocusOut>", lambda e: help_menu.unpost())
+            root.bind("<Button-1>", lambda e: help_menu.unpost(), add="+")
+
+        txt.bind("<Button-3>", show_help_menu)
 
     help_btn = ttk.Button(frame, text="如何获取？", command=show_token_help)
     help_btn.pack(pady=5)
@@ -325,8 +316,7 @@ def open_access_token_window():
     x = (ws // 2) - (w // 2)
     y = (hs // 2) - (h // 2)
     token_window.geometry(f"{w}x{h}+{x}+{y}")
-    token_window.lift()  # 置顶可见
-
+    token_window.lift() # 置顶可见
 
 class resource_helper: # 获取网站上资源的数据
     def parse_hierarchy(self, hierarchy): # 解析层级数据
@@ -408,13 +398,13 @@ class resource_helper: # 获取网站上资源的数据
                     temp_hier["children"][lesson["id"]] = lesson
 
         return parsed_hier
-    
+
     def fetch_resource_list(self): # 获取资源列表
         book_hier = self.fetch_book_list()
         # lesson_hier = self.fetch_lesson_list() # 目前此函数代码存在问题
         return { **book_hier }
 
-def thread_it(func, args: tuple = ()): # args 为元组，且默认值是空元组
+def thread_it(func, args: tuple = ()) -> None: # args 为元组，且默认值是空元组
     # 打包函数到线程
     t = threading.Thread(target=func, args=args)
     # t.daemon = True
@@ -427,118 +417,105 @@ access_token = None
 headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # “MAC id”等同于“access_token”，“nonce”和“mac”不可缺省但无需有效
 session.proxies = { "http": None, "https": None } # 全局忽略代理
 
-# 尝试从注册表读取本地存储的 access_token（仅限Windows）
-def load_access_token_from_registry():
+def load_access_token() -> None: # 读取本地存储的 Access Token
     global access_token
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser", 0, winreg.KEY_READ) as key:
-            token, _ = winreg.QueryValueEx(key, "AccessToken")
-            if token:
-                access_token = token
-                # 更新请求头
-                headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
-    except:
-        pass  # 读取失败则不做处理
+        if os_name == "Windows": # 在 Windows 上，从注册表读取
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser", 0, winreg.KEY_READ) as key:
+                token, _ = winreg.QueryValueEx(key, "AccessToken")
+                if token:
+                    access_token = token
+                    # 更新请求头
+                    headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
+        elif os_name == "Linux": # 在 Linux 上，从 ~/.config/tchMaterial-parser/data.json 文件读取
+            # 构建文件路径
+            target_file = os.path.join(
+                os.path.expanduser("~"), # 获取当前用户主目录
+                ".config",
+                "tchMaterial-parser",
+                "data.json"
+            )
+            if not os.path.exists(target_file): # 文件不存在则不做处理
+                return
 
-# 尝试从Linux系统的 ~/.config/tchMaterial-parser/data.json 文件加载 access_token
-def load_access_token_on_linux():
+            # 读取 JSON 文件
+            with open(target_file, "r") as f:
+                data = json.load(f)
+            # 提取 access_token 字段
+            access_token = data["access_token"]
+
+    except Exception:
+        pass # 读取失败则不做处理
+
+def set_access_token(token: str) -> str: # 设置并更新 Access Token
     global access_token
-    try:
-        # 构建文件路径
-        target_file = os.path.join(
-            os.path.expanduser("~"), 
-            ".config",
-            "tchMaterial-parser", 
-            "data.json"
-        )
-        # 检查文件是否存在
-        if not os.path.exists(target_file):
-            return   # 文件不存在不做处理
-        # 读取JSON文件
-        with open(target_file, 'r') as f:
-            data = json.load(f)
-        # 提取 access_token 字段
-        access_token = data["access_token"]
-    except:
-        pass
-
-# 将access_token写入注册表
-def save_access_token_to_registry(token: str):
-    try:
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\tchMaterial-parser") as key:
-            winreg.SetValueEx(key, "AccessToken", 0, winreg.REG_SZ, token)
-    except:
-        pass
-
-# 将access_token保存到 Linux 系统的 ~/.config/tchMaterial-parser/data.json 文件中
-def save_access_token_on_linux(token: str):
-    try:
-        # 获取用户主目录路径
-        home_dir = os.path.expanduser("~")
-        # 构建目标目录和文件路径
-        target_dir = os.path.join(
-            home_dir, 
-            ".config",  # 新增的目录层级
-            "tchMaterial-parser"
-        )
-        target_file = os.path.join(target_dir, "data.json")
-        # 创建目录（如果不存在）
-        os.makedirs(target_dir, exist_ok=True)
-        # 构建要保存的数据字典
-        data = {"access_token": token}
-        # 写入JSON文件
-        with open(target_file, 'w') as f:
-            json.dump(data, f, indent=4)
-    except:
-        pass
-
-
-# 设置并更新access_token
-def set_access_token(token: str):
-    global access_token, headers
     access_token = token
     headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
-    save_access_token(token)
 
-if os_name == "Windows":
-    load_access_token = load_access_token_from_registry
-    save_access_token = save_access_token_to_registry
-    # 在 Windows 上额外提示存储位置
-    reg_pos = "HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
-    tip_info = f"Access Token 已保存！\n已写入注册表：{reg_pos}"
-elif os_name == "Linux":
-    load_access_token = load_access_token_on_linux
-    save_access_token = save_access_token_on_linux
-    # 在 Linux 上额外提示存储位置
-    file_path = "~/.config/tchMaterial-parser/data.json"
-    tip_info = f"Access Token 已保存！\n已写入文件：{file_path}"
-else:
-    # 在其他操作系统上 load/save access_token 什么也不做
-    load_access_token = lambda : 0
-    save_access_token = lambda token : 0
-    tip_info = "Access Token 已保存！"
+    try:
+        if os_name == "Windows": # 在 Windows 上，将 Access Token 写入注册表
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser") as key:
+                winreg.SetValueEx(key, "AccessToken", 0, winreg.REG_SZ, token)
+            return "Access Token 已保存！\n已写入注册表：HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
+        elif os_name == "Linux": # 在 Linux 上，将 Access Token 保存至 ~/.config/tchMaterial-parser/data.json 文件中
+            # 构建目标目录和文件路径
+            target_dir = os.path.join(
+                os.path.expanduser("~"),
+                ".config",
+                "tchMaterial-parser"
+            )
+            target_file = os.path.join(target_dir, "data.json")
+            # 创建目录（如果不存在）
+            os.makedirs(target_dir, exist_ok=True)
 
-# 立即尝试加载已存的access_token（如果有的话）
+            # 构建要保存的数据字典
+            data = { "access_token": token }
+            # 写入 JSON 文件
+            with open(target_file, "w") as f:
+                json.dump(data, f, indent=4)
+
+            return "Access Token 已保存！\n已写入文件：~/.config/tchMaterial-parser/data.json"
+        else:
+            return "Access Token 已保存！"
+    except Exception:
+        return "Access Token 已保存！"
+
+# 立即尝试加载已存的 Access Token（如果有的话）
 load_access_token()
 
 # 获取资源列表
 try:
     resource_list = resource_helper().fetch_resource_list()
-except:
+except Exception:
     resource_list = {}
     messagebox.showwarning("警告", "获取资源列表失败，请手动填写资源链接，或重新打开本程序") # 弹出警告窗口
 
 # GUI
 root = tk.Tk()
 
+# 高 DPI 适配
+if os_name == "Windows":
+    scale: float = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
+
+    # 调用 API 设置成由应用程序缩放
+    try: # Windows 8.1 或更新
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception: # Windows 8 或更老
+        ctypes.windll.user32.SetProcessDPIAware()
+else: # 在非 Windows 操作系统上，通过 Tkinter 估算缩放因子
+    try:
+        scale: float = round(root.winfo_fpixels("1i") / 96.0, 2)
+    except Exception:
+        scale = 1.0
+
 root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
 
-root.title("国家中小学智慧教育平台 资源下载工具 v3.0") # 设置窗口标题
+root.title("国家中小学智慧教育平台 资源下载工具 v3.1") # 设置窗口标题
 # root.geometry("900x600") # 设置窗口大小
 
 def set_icon() -> None: # 设置窗口图标
     # 窗口左上角小图标
-    if os_name == "Windows":
+    if os_name == "Windows": # 在 Windows 操作系统中，使用 .ico 图标
         icon = base64.b64decode("AAABAAEAMDAAAAEAIACoJQAAFgAAACgAAAAwAAAAYAAAAAEAIAAAAAAAACQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA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AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///////8AAP///////wAA////////AAD///////8AAP///////wAA////////AAD///////8AAP///////wAA//gAf///AAD/4AAP//8AAP/AAAH//wAA/4AAAH//AAD/AAAAD/kAAPwAAAAABwAA8AAPgAAPAADgA///gH8AAMAP/8B//wAAgBf/gB//AACAE/8AD/8AAAAT/wAH/wAAABH/AAf/AAAAFf8AA/8AAAAU/wAD/wAAABT/gAP/AAAAFv/AAf8AAAAWf+AB/wAAgBJ/4AH/AACAEz/AAf8AAMASP4AD/wAA4AAcAAP/AADwAAAAA/8AAPgAAAAH/wAA/gAAAA//AAD+AAAAH/8AAP8AAAA//wAA/wAAAP//AAD/gAB///8AAP/AAP///wAA/+AB////AAD/+Af///8AAP///////wAA////////AAD///////8AAP///////wAA////////AAD///////8AAP///////wAA////////AAA=")
 
         with open(tempfile.gettempdir() + "/icon.ico", "wb") as f:
@@ -552,7 +529,6 @@ def set_icon() -> None: # 设置窗口图标
         icon = tk.PhotoImage(file=tempfile.gettempdir() + "/icon.png")
         root.iconphoto(True, icon) # 更改窗口左上角的小图标
 
-
 thread_it(set_icon) # 设置窗口图标耗时较长，为不影响窗口绘制，采用多线程
 
 def on_closing() -> None: # 处理窗口关闭事件
@@ -562,7 +538,7 @@ def on_closing() -> None: # 处理窗口关闭事件
     for child in child_processes: # 结束所有子进程
         try:
             child.terminate() # 结束进程
-        except: # 进程可能已经结束
+        except Exception: # 进程可能已经结束
             pass
 
     # 结束自身进程
@@ -580,24 +556,31 @@ title_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
 description = """\
 📌 请在下面的文本框中输入一个或多个资源页面的网址（每个网址一行）。
 🔗 资源页面网址示例：
-      https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=...
-📝 您也可以直接在下方蓝色选项卡中选择教材。
-📥 点击“下载”按钮后，程序会解析并下载资源。
-⚠️ 注：如您是第一次使用本程序，请先点击“设置Token”，参照里面的说明完成设置。"""
-description_label = ttk.Label(container_frame, text=description, justify="left") # 添加描述标签
+    https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=...
+📝 您也可以直接在下方的选项卡中选择教材。
+📥 点击 “下载” 按钮后，程序会解析并下载资源。
+⚠️ 注：为了更可靠地下载，建议点击 “设置 Token” 按钮，参照里面的说明完成设置。"""
+description_label = ttk.Label(container_frame, text=description, justify="left", font=("微软雅黑", 9)) # 添加描述标签
 description_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
 
-url_text = tk.Text(container_frame, width=70, height=12) # 添加 URL 输入框，长度和宽度不使用缩放！！！
+url_text = tk.Text(container_frame, width=70, height=12, font=("微软雅黑", 9)) # 添加 URL 输入框，长度和宽度不使用缩放！！！
 url_text.pack(padx=int(15 * scale), pady=int(15 * scale)) # 设置水平外边距、垂直外边距（跟随缩放）
 
 # 创建右键菜单
 context_menu = tk.Menu(root, tearoff=0)
-context_menu.add_command(label="剪切 (Ctrl + X)", command=lambda: url_text.event_generate("<<Cut>>"))
-context_menu.add_command(label="复制 (Ctrl + C)", command=lambda: url_text.event_generate("<<Copy>>"))
-context_menu.add_command(label="粘贴 (Ctrl + V)", command=lambda: url_text.event_generate("<<Paste>>"))
+context_menu.add_command(label="剪切 (Ctrl＋X)", command=lambda: url_text.event_generate("<<Cut>>"))
+context_menu.add_command(label="复制 (Ctrl＋C)", command=lambda: url_text.event_generate("<<Copy>>"))
+context_menu.add_command(label="粘贴 (Ctrl＋V)", command=lambda: url_text.event_generate("<<Paste>>"))
+
+def show_context_menu(event):
+    context_menu.post(event.x_root, event.y_root)
+    # 绑定失焦事件，失焦时自动关闭菜单
+    context_menu.bind("<FocusOut>", lambda e: context_menu.unpost())
+    # 绑定左键点击事件，点击其他地方也关闭菜单
+    root.bind("<Button-1>", lambda e: context_menu.unpost(), add="+")
 
 # 绑定右键菜单到文本框（3 代表鼠标的右键按钮）
-url_text.bind("<Button-3>", lambda event: context_menu.post(event.x_root, event.y_root))
+url_text.bind("<Button-3>", show_context_menu)
 
 options = [["---"] + [resource_list[k]["display_name"] for k in resource_list], ["---"], ["---"], ["---"], ["---"], ["---"], ["---"], ["---"]] # 构建选择项
 
@@ -684,7 +667,6 @@ def selection_handler(index: int, *args) -> None:
             url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
         else:
             url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
-
 
 for index in range(8): # 绑定事件
     variables[index].trace_add("write", partial(selection_handler, index))

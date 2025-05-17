@@ -5,24 +5,18 @@
 ![Made With Love❤️](https://img.shields.io/badge/Made_With-%E2%9D%A4-red.svg)
 
 > [!TIP]
-> 🚀最新版本 v3.0 现已发布，欢迎体验！
+> 🚀最新版本 v3.1 现已发布，该版本在未设置 Access Token 时也可下载电子课本，欢迎体验！
 
 本工具可以帮助您从[**国家中小学智慧教育平台**](https://basic.smartedu.cn/)获取电子课本的 PDF 文件网址并进行下载，让您更方便地获取课本内容。
 
-> [!WARNING]
->
-> 自 **2025 年 2 月**起，国家中小学智慧教育平台**需要登录**才能访问电子课本资源，用户需提供 **Access Token**（即登录凭据）才可正常使用本工具的下载功能。
->
-> **👉请先按照[下方指南](#2-设置-access-token)设置 Access Token，否则程序将无法解析资源！**
-
 ## ✨工具特点
 
-- **支持 Access Token 登录**🔑：支持用户手动输入 Access Token，在 Windows 操作系统下会存入注册表，下次启动可自动加载。
-- **支持批量下载**📚：一次输入多个电子课本预览页面网址，即可批量下载 PDF 课本文件。
-- **自动文件命名**📂：程序会自动使用教材名称作为文件名，方便管理下载的课本文件。
-- **高 DPI 适配**🖥️：优化 UI 以适配高分辨率屏幕，避免界面模糊问题。
-- **下载进度可视化**📊：实时显示下载进度，支持暂停/恢复操作。
-- **跨平台支持**💻：支持 Windows、Linux、macOS 等操作系统（需要图形界面）。
+- 🔑**支持 Access Token 登录**：支持用户手动输入 Access Token，在 Windows 操作系统下会存入注册表，Linux 操作系统下会存入 `~/.config/tchMaterial-parser` 文件夹，下次启动可自动加载。
+- 📚**支持批量下载**：一次输入多个电子课本预览页面网址，即可批量下载 PDF 课本文件。
+- 📂**自动文件命名**：程序会自动使用教材名称作为文件名，方便管理下载的课本文件。
+- 🖥️**高 DPI 适配**：优化 UI 以适配高分辨率屏幕，避免界面模糊问题。
+- 📊**下载进度可视化**：实时显示下载进度，支持暂停/恢复操作。
+- 💻**跨平台支持**：支持 Windows、Linux、macOS 等操作系统（需要图形界面）。
 
 ![程序截图](./res/PixPin_2025-03-14_23-44-26.png)
 
@@ -58,7 +52,8 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 ### 2. 设置 Access Token🔑
 
-若您第一次使用本程序，需点击 “**设置 Token**” 按钮，粘贴 Access Token 并保存。具体操作方法如下：
+> [!TIP]
+> 自 v3.1 版本起，这一步操作已经**不再是必要的**，当未设置 Access Token 时程序会使用其他方法下载电子课本。然而，这一方法**并不长期有效**，因此仍然建议您进行这一步操作。
 
 1. **打开浏览器**，访问[国家中小学智慧教育平台](https://auth.smartedu.cn/uias/login)并**登录账号**。
 2. 按下 **F12** 或 **Ctrl+Shift+I**，或右键——检查（审查元素）打开**开发者工具**，选择**控制台（Console）**。
@@ -73,14 +68,14 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
      }
      const tokenData = JSON.parse(localStorage.getItem(authKey));
      const accessToken = JSON.parse(tokenData.value).access_token;
-     console.log("%cAccess Token: ", "color: green; font-weight: bold", accessToken);
+     console.log("%cAccess Token:", "color: green; font-weight: bold", accessToken);
    })();
    ```
   
 4. 复制控制台输出的 **Access Token**，然后在本程序中点击 “**设置 Token**” 按钮，粘贴并保存 Token。
 
 > [!NOTE]
-> Access Token 可能会过期，若下载失败提示 **401 Unauthorized**，请重新获取并设置新的 Token。
+> Access Token 可能会过期，若下载失败提示 **401 Unauthorized** 或 **403 Forbidden**，请重新获取并设置新的 Token。
 
 ### 3. 开始下载🚀
 
@@ -92,14 +87,15 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 ### 1. 为什么下载失败？⚠️
 
-- 检查是否已[**正确设置 Access Token**](#2-设置-access-token)🔑，且没有过期。
+- 如果您没有设置 Access Token，可能是本程序使用的方法失效了，请[**设置 Access Token**](#2-设置-access-token)🔑。
+- 如果您设置了 Access Token，由于其具有时效性（一般为 7 天），因此极有可能是 Access Token 过期了，请重新获取新的 Access Token。
 - **确认网络连接是否正常**🌐，有时网络不稳定可能导致下载失败。
 - **确保输入的网址有效**🔗，部分旧资源可能已被移除。
 
 ### 2. Access Token 保存在哪里？💾
 
 - **Windows 操作系统**：Token 会存储在**注册表** `HKEY_CURRENT_USER\Software\tchMaterial-parser` 项中的 `AccessToken` 值。
-- **Linux 操作系统**: Token 会存储在 `~/.config/tchMaterial-parser/data.json` 的文件中。
+- **Linux 操作系统**: Token 会存储在**文件** `~/.config/tchMaterial-parser/data.json` 中。
 - **macOS 等操作系统**：Token 仅在运行时临时存储于内存，不会自动保存，程序重启后需重新输入，目前我们正在努力改进该功能。
 
 ### 3. Token 会不会泄露？🔐
