@@ -1,4 +1,4 @@
-# [国家中小学智慧教育平台](https://basic.smartedu.cn/tchMaterial/) 电子课本下载工具
+# [国家中小学智慧教育平台 电子课本](https://basic.smartedu.cn/tchMaterial/)下载工具
 
 ![Python Version](https://img.shields.io/badge/Python-3.x-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -7,11 +7,11 @@
 > [!TIP]
 > 🚀最新版本 v3.0 现已发布，欢迎体验！
 
-本工具可以帮助您从[**国家中小学智慧教育平台**](https://basic.smartedu.cn/tchMaterial/)获取电子课本的 PDF 文件网址并进行下载，让您更方便地获取课本内容。
+本工具可以帮助您从[**国家中小学智慧教育平台**](https://basic.smartedu.cn/)获取电子课本的 PDF 文件网址并进行下载，让您更方便地获取课本内容。
 
-> [!NOTE]
+> [!WARNING]
 >
-> 自**2025 年 2 月**起，国家中小学智慧教育平台**需要登录**才能访问电子课本资源，用户需提供 **Access Token**（即登录凭据）才可正常使用本工具的下载功能。
+> 自 **2025 年 2 月**起，国家中小学智慧教育平台**需要登录**才能访问电子课本资源，用户需提供 **Access Token**（即登录凭据）才可正常使用本工具的下载功能。
 >
 > **👉请先按照[下方指南](#2-设置-access-token)设置 Access Token，否则程序将无法解析资源！**
 
@@ -26,7 +26,7 @@
 
 ![程序截图](./res/PixPin_2025-03-14_23-44-26.png)
 
-## ⬇️下载与安装方法
+## 📥下载与安装方法
 
 ### GitHub Releases 页面
 
@@ -42,11 +42,11 @@
 yay -S tchmaterial-parser
 ```
 
-感谢 [@iamzhz](https://github.com/iamzhz) 制作了本工具的发行包（[#26](../../issues/26)）！
+感谢 [@iamzhz](https://github.com/iamzhz) 为本工具制作了发行包（[#26](../../issues/26)）！
 
 ## 🛠️使用方法
 
-### 1. 输入教材链接📥
+### 1. 输入教材链接⌨️
 
 将电子课本的**预览页面网址**粘贴到程序文本框中，支持多个 URL（每行一个）。
 
@@ -58,7 +58,7 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 ### 2. 设置 Access Token🔑
 
-若您第一次使用本程序，需点击 “**设置 Token**” 按钮，粘贴 Access Token 并保存。
+若您第一次使用本程序，需点击 “**设置 Token**” 按钮，粘贴 Access Token 并保存。具体操作方法如下：
 
 1. **打开浏览器**，访问[国家中小学智慧教育平台](https://auth.smartedu.cn/uias/login)并**登录账号**。
 2. 按下 **F12** 或 **Ctrl+Shift+I**，或右键——检查（审查元素）打开**开发者工具**，选择**控制台（Console）**。
