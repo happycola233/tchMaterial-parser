@@ -1,0 +1,31 @@
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(3, 1, 0, 0),
+    prodvers=(3, 1, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x4,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+    ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '080404B0',
+        [
+          StringStruct('CompanyName', '肥宅水水呀'),
+          StringStruct('FileDescription', '国家中小学智慧教育平台 资源下载工具'),
+          StringStruct('FileVersion', '3.1.0.0'),
+          StringStruct('InternalName', 'tchMaterial-parser'),
+          StringStruct('LegalCopyright', 'Copyright © 2025 肥宅水水呀'),
+          StringStruct('OriginalFilename', 'tchMaterial-parser.exe'),
+          StringStruct('ProductName', '国家中小学智慧教育平台 资源下载工具'),
+          StringStruct('ProductVersion', '3.1.0.0'),
+          StringStruct('Comments', '国中小学智慧教育平台 资源下载工具')
+        ]
+      )
+    ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)

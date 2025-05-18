@@ -53,7 +53,7 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 ### 2. 设置 Access Token🔑
 
 > [!TIP]
-> 自 v3.1 版本起，这一步操作已经**不再是必要的**，当未设置 Access Token 时程序会使用其他方法下载电子课本。然而，这一方法**并不长期有效**，因此仍然建议您进行这一步操作。
+> 自 v3.1 版本起，这一步操作已经**不再必要**，当未设置 Access Token 时程序会使用其他方法下载资源。然而，这一方法**并不长期有效，且对于部分资源无效**，因此仍然建议您进行这一步操作。
 
 1. **打开浏览器**，访问[国家中小学智慧教育平台](https://auth.smartedu.cn/uias/login)并**登录账号**。
 2. 按下 **F12** 或 **Ctrl+Shift+I**，或右键——检查（审查元素）打开**开发者工具**，选择**控制台（Console）**。
