@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['src\\tchMaterial-parser.pyw'],
+    ['src/tchMaterial-parser.pyw'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -36,5 +36,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     version='version.txt',
-    icon=['src\\favicon_48x48.ico'],
+    icon=['src/favicon_48x48.ico'],
 )
