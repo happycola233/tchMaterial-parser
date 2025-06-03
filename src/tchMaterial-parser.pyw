@@ -146,7 +146,11 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
 
         failed_states = [state for state in download_states if state["failed_reason"]]
         if len(failed_states) > 0:
-            messagebox.showwarning("下载完成", f"文件已下载到：{os.path.dirname(save_path)}\n以下链接下载失败：\n{"\n".join(f"{state["download_url"]}，原因：{state["failed_reason"]}" for state in failed_states)}")
+            messagebox.showwarning(
+                "下载完成",
+                f"文件已下载到：{os.path.dirname(save_path)}\n以下链接下载失败：\n"
+                + "\n".join(f'{state["download_url"]}，原因：{state["failed_reason"]}' for state in failed_states)
+            )
         else:
             messagebox.showinfo("下载完成", f"文件已下载到：{os.path.dirname(save_path)}") # 显示完成对话框
 
