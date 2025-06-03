@@ -1,0 +1,43 @@
+name: Build & Release macOS App
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-macos:
+    name: Build macOS App
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          # If you have requirements.txt, uncomment the next line:
+          pip install -r requirements.txt
+
+      - name: Build app with PyInstaller
+        run: |
+          pyinstaller --windowed --onefile src/tchMaterial-parser.pyw --name tchMaterial-parser
+          # The output binary will be in dist/tchMaterial-parser
+
+      - name: Create zip archive
+        run: |
+          cd dist
+          zip -r tchMaterial-parser-mac.zip tchMaterial-parser
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/tchMaterial-parser-mac.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
