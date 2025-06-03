@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13.3'
 
       - name: Install dependencies
         run: |
@@ -27,16 +27,17 @@ jobs:
 
       - name: Build app with PyInstaller
         run: |
-          pyinstaller --windowed --onefile src/tchMaterial-parser.pyw --name tchMaterial-parser
+          pyinstaller --windowed src/tchMaterial-parser.pyw --name tchMaterial-parser
           # The output binary will be in dist/tchMaterial-parser
 
       - name: Create zip archive
         run: |
-          zip -r tchMaterial-parser-mac.zip dist
+          cd dist
+          zip -r tchMaterial-parser-mac.zip tchMaterial-parser.app
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: ./tchMaterial-parser-mac.zip
+          files: dist/tchMaterial-parser-mac.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
