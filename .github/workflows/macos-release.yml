@@ -33,7 +33,7 @@ jobs:
       - name: Create zip archive
         run: |
           cd dist
-          zip -r tchMaterial-parser-mac.zip tchMaterial-parser
+          zip -r tchMaterial-parser-mac.zip tchMaterial-parser.app
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
