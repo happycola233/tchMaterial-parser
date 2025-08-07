@@ -709,7 +709,7 @@ for i in range(8):
     drop.config(state="active") # 配置下拉菜单为始终活跃状态，保证下拉菜单一直有形状
     drop.bind("<Leave>", lambda e: "break") # 绑定鼠标移出事件，当鼠标移出下拉菜单时，执行 lambda 函数，“break”表示中止事件传递
     drop.grid(row=i // 4, column=i % 4, padx=int(15 * scale), pady=int(15 * scale)) # 设置位置，2 行 4 列（跟随缩放）
-    variables[i].set("---")
+    variables[i].set("分类")
     drops.append(drop)
 
 # 按钮：设置 Token
