@@ -2,7 +2,7 @@
 # 国家中小学智慧教育平台 资源下载工具 v3.1
 # 项目地址：https://github.com/happycola233/tchMaterial-parser
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
-# 最近更新于：2025-05-18
+# 最近更新于：2025-05-20
 
 # 导入相关库
 import tkinter as tk
@@ -103,19 +103,16 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
     current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None }
     download_states.append(current_state)
 
-    response = session.get(url, headers=headers, stream=True)
+    try:
+        response = session.get(url, headers=headers, stream=True)
 
-    # 服务器返回 401 或 403 状态码
-    if response.status_code == 401 or response.status_code == 403:
-        current_state["finished"] = True
-        current_state["failed_reason"] = "授权失败，Access Token 可能已过期或无效，请重新设置"
-    elif response.status_code >= 400:
-        current_state["finished"] = True
-        current_state["failed_reason"] = f"服务器返回状态码 {response.status_code}"
-    else:
-        current_state["total_size"] = int(response.headers.get("Content-Length", 0))
+        # 服务器返回表示错误的 HTTP 状态码
+        if response.status_code >= 400:
+            current_state["finished"] = True
+            current_state["failed_reason"] = f"服务器返回状态码 {response.status_code}" + "，Access Token 可能已过期或无效，请重新设置" if response.status_code == 401 or response.status_code == 403 else ""
+        else:
+            current_state["total_size"] = int(response.headers.get("Content-Length", 0))
 
-        try:
             with open(save_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=131072): # 分块下载，每次下载 131072 字节（128 KB）
                     file.write(chunk)
@@ -134,10 +131,11 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
 
             current_state["downloaded_size"] = current_state["total_size"]
             current_state["finished"] = True
-        except Exception as e:
-            current_state["downloaded_size"], current_state["total_size"] = 0, 0
-            current_state["finished"] = True
-            current_state["failed_reason"] = str(e)
+
+    except Exception as e:
+        current_state["downloaded_size"], current_state["total_size"] = 0, 0
+        current_state["finished"] = True
+        current_state["failed_reason"] = str(e)
 
     if all(state["finished"] for state in download_states):
         download_progress_bar["value"] = 0 # 重置进度条

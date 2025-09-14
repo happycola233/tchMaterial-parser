@@ -22,7 +22,7 @@ VSVersionInfo(
           StringStruct('OriginalFilename', 'tchMaterial-parser.exe'),
           StringStruct('ProductName', '国家中小学智慧教育平台 资源下载工具'),
           StringStruct('ProductVersion', '3.1.0.0'),
-          StringStruct('Comments', '国中小学智慧教育平台 资源下载工具')
+          StringStruct('Comments', '国家中小学智慧教育平台 资源下载工具')
         ]
       )
     ]),
