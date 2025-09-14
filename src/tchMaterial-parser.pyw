@@ -1,29 +1,27 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 资源下载工具 v3.1
+# 国家中小学智慧教育平台 资源下载工具 v3.2
 # 项目地址：https://github.com/happycola233/tchMaterial-parser
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
-# 最近更新于：2025-05-20
+# 最近更新于：2025-09-14
 
 # 导入相关库
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import os, platform
-import sys
+import os, sys, platform
 from functools import partial
-import base64, tempfile, pyperclip
-import threading, requests, psutil
-import json, re
+import threading, psutil, tempfile, pyperclip
+import base64, json, re, requests
 
 os_name = platform.system() # 获取操作系统类型
 
-if os_name == "Windows": # 如果是 Windows 操作系统，导入 Windows 相关库
+if os_name == "Windows": # 在 Windows 操作系统下，导入 Windows 相关库
     import win32print, win32gui, win32con, win32api, ctypes, winreg
 
 def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 URL
     try:
         content_id, content_type, resource_url = None, None, None
 
-        # 简单提取 URL 中的 contentId 与 contentType（这种方法不严谨，但为了减少导入的库只能这样了）
+        # 简单提取 URL 中的 contentId 与 contentType（为了减少导入的库，使用了不严谨的方法）
         for q in url[url.find("?") + 1:].split("&"):
             if q.split("=")[0] == "contentId":
                 content_id = q.split("=")[1]
@@ -61,9 +59,9 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
         """
         # 其中 $.ti_items 的每一项对应一个资源
 
-        if re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对于 “基础性作业” 的解析
+        if re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对基础性作业的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
-        else: # 对于课本的解析
+        else: # 对课本的解析
             if content_type == "thematic_course": # 对专题课程（含电子课本、视频等）的解析
                 response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
             else: # 对普通电子课本的解析
@@ -71,10 +69,10 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
 
         data = response.json()
         for item in list(data["ti_items"]):
-            if item["lc_ti_format"] == "pdf": # 找到存有 PDF 链接列表的项
+            if item["lc_ti_format"] == "pdf": # 寻找存有 PDF 链接列表的项
                 resource_url: str = item["ti_storages"][0] # 获取并构造 PDF 的 URL
                 if not access_token: # 未登录时，通过一个不可靠的方法构造可直接下载的 URL
-                    resource_url = re.sub(r"^https?://(.+)-private.ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}).pkg/(?:.+)\.pdf$", r"https://\1.ykt.cbern.com.cn/\2/\3.pkg/pdf.pdf", resource_url)
+                    resource_url = re.sub(r"^https?://(?:.+).ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}).pkg/(.+)\.pdf$", r"https://c1.ykt.cbern.com.cn/\1/\2.pkg/\3.pdf", resource_url)
                 break
 
         if not resource_url:
@@ -87,7 +85,7 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
                             if item["lc_ti_format"] == "pdf":
                                 resource_url: str = item["ti_storages"][0]
                                 if not access_token:
-                                    resource_url = re.sub(r"^https?://(.+)-private.ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}).pkg/(?:.+)\.pdf$", r"https://\1.ykt.cbern.com.cn/\2/\3.pkg/pdf.pdf", resource_url)
+                                    resource_url = re.sub(r"^https?://(?:.+).ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}).pkg/(.+)\.pdf$", r"https://c1.ykt.cbern.com.cn/\1/\2.pkg/\3.pdf", resource_url)
                                 break
                 if not resource_url:
                     return None, None, None
@@ -95,8 +93,8 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
                 return None, None, None
 
         return resource_url, content_id, data["title"]
-    except Exception:
-        return None, None, None # 如果解析失败，返回 None
+    except Exception: # 解析失败时返回 None
+        return None, None, None
 
 def download_file(url: str, save_path: str) -> None: # 下载文件
     global download_states
@@ -106,10 +104,9 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
     try:
         response = session.get(url, headers=headers, stream=True)
 
-        # 服务器返回表示错误的 HTTP 状态码
-        if response.status_code >= 400:
+        if response.status_code >= 400: # 服务器返回表示错误的 HTTP 状态码
             current_state["finished"] = True
-            current_state["failed_reason"] = f"服务器返回状态码 {response.status_code}" + "，Access Token 可能已过期或无效，请重新设置" if response.status_code == 401 or response.status_code == 403 else ""
+            current_state["failed_reason"] = f"服务器返回 HTTP 状态码 {response.status_code}" + "，Access Token 可能已过期或无效，请重新设置" if response.status_code == 401 or response.status_code == 403 else ""
         else:
             current_state["total_size"] = int(response.headers.get("Content-Length", 0))
 
@@ -124,10 +121,8 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
 
                     if all_total_size > 0: # 防止下面一行代码除以 0 而报错
                         download_progress = (all_downloaded_size / all_total_size) * 100
-                        # 更新进度条
-                        download_progress_bar["value"] = download_progress
-                        # 更新标签以显示当前下载进度
-                        progress_label.config(text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签
+                        download_progress_bar["value"] = download_progress # 更新进度条
+                        progress_label.config(text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
 
             current_state["downloaded_size"] = current_state["total_size"]
             current_state["finished"] = True
@@ -137,18 +132,18 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
         current_state["finished"] = True
         current_state["failed_reason"] = str(e)
 
-    if all(state["finished"] for state in download_states):
+    if all(state["finished"] for state in download_states): # 所有文件下载完成
         download_progress_bar["value"] = 0 # 重置进度条
         progress_label.config(text="等待下载") # 清空进度标签
         download_btn.config(state="normal") # 设置下载按钮为启用状态
 
         failed_states = [state for state in download_states if state["failed_reason"]]
-        if len(failed_states) > 0:
-            messagebox.showwarning("下载完成", f"文件已下载到：{os.path.dirname(save_path)}\n以下链接下载失败：\n{"\n".join(f"{state["download_url"]}，原因：{state["failed_reason"]}" for state in failed_states)}")
+        if len(failed_states) > 0: # 存在下载失败的文件
+            messagebox.showwarning("下载完成", f"文件已下载到：{os.path.dirname(save_path)}\n以下文件下载失败：\n{"\n".join(f"{state["download_url"]}，原因：{state["failed_reason"]}" for state in failed_states)}")
         else:
-            messagebox.showinfo("下载完成", f"文件已下载到：{os.path.dirname(save_path)}") # 显示完成对话框
+            messagebox.showinfo("下载完成", f"文件已下载到：{os.path.dirname(save_path)}")
 
-def format_bytes(size: float) -> str: # 将数据单位进行格式化，返回以 KB、MB、GB、TB 为单位的数据大小
+def format_bytes(size: float) -> str: # 将数据单位进行格式化，返回以 KB、MB、GB、TB、PB 为单位的数据大小
     for x in ["字节", "KB", "MB", "GB", "TB"]:
         if size < 1024.0:
             return f"{size:3.1f} {x}"
@@ -168,7 +163,7 @@ def parse_and_copy() -> None: # 解析并复制链接
         resource_links.append(resource_url)
 
     if failed_links:
-        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
+        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links))
 
     if resource_links:
         pyperclip.copy("\n".join(resource_links)) # 将链接复制到剪贴板
@@ -228,7 +223,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_window.grab_set() # 阻止主窗口操作
     token_window.bind("<Escape>", lambda event: token_window.destroy()) # 绑定 Esc 键关闭窗口
 
-    # 设置一个 Frame 用于留白、布局更美观
+    # 设置一个 Frame 用于留白，使布局更美观
     frame = ttk.Frame(token_window, padding=20)
     frame.pack(fill="both", expand=True)
 
@@ -236,7 +231,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     label = ttk.Label(frame, text="请粘贴从浏览器获取的 Access Token：", font=("微软雅黑", 10))
     label.pack(pady=5)
 
-    # 多行 Text 替代原先 Entry，并绑定右键菜单
+    # 创建多行 Text
     token_text = tk.Text(frame, width=50, height=4, wrap="word", font=("微软雅黑", 9))
     token_text.pack(pady=5)
 
@@ -258,22 +253,20 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
 
     token_text.bind("<Button-3>", show_token_menu)
 
-    # 按下 Enter 键即可保存 token，并屏蔽换行事件
+    # 按下 Enter 键，保存 Access Token，并屏蔽换行事件
     def return_save_token(event):
         save_token()
         return "break"
 
-    token_text.bind("<Return>", return_save_token) # 按下 Enter 键，保存 Access Token
+    token_text.bind("<Return>", return_save_token)
     token_text.bind("<Shift-Return>", lambda e: "break") # 按下 Shift＋Enter 也不换行，直接屏蔽
 
     # 保存按钮
     def save_token():
         user_token = token_text.get("1.0", tk.END).strip()
         tip_info = set_access_token(user_token)
-        # 重新启用下载按钮，并提示用户
-        download_btn.config(state="normal")
-        # 显示提示
-        messagebox.showinfo("提示", tip_info)
+        download_btn.config(state="normal") # 重新启用下载按钮
+        messagebox.showinfo("保存成功", tip_info)
 
         token_window.destroy()
 
@@ -429,19 +422,15 @@ class resource_helper: # 获取网站上资源的数据
         # lesson_hier = self.fetch_lesson_list() # 目前此函数代码存在问题
         return { **book_hier }
 
-def thread_it(func, args: tuple = ()) -> None: # args 为元组，且默认值是空元组
-    # 打包函数到线程
+def thread_it(func, args: tuple = ()) -> None: # 打包函数到线程
     t = threading.Thread(target=func, args=args)
     # t.daemon = True
     t.start()
 
-# 初始化请求
-session = requests.Session()
-# 初始化下载状态
-download_states = []
-# 设置请求头部，包含认证信息
+session = requests.Session() # 初始化请求
+download_states = [] # 初始化下载状态
 access_token = None
-headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # “MAC id”等同于“access_token”，“nonce”和“mac”不可缺省但无需有效
+headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
 session.proxies = { "http": None, "https": None } # 全局忽略代理
 
 def load_access_token() -> None: # 读取本地存储的 Access Token
@@ -469,6 +458,20 @@ def load_access_token() -> None: # 读取本地存储的 Access Token
             with open(target_file, "r") as f:
                 data = json.load(f)
             # 提取 access_token 字段
+            access_token = data["access_token"]
+        elif os_name == "Darwin": # 在 macOS 上，从 ~/Library/Application Support/tchMaterial-parser/data.json 文件读取
+            target_file = os.path.join(
+                os.path.expanduser("~"),
+                "Library",
+                "Application Support",
+                "tchMaterial-parser",
+                "data.json"
+            )
+            if not os.path.exists(target_file):
+                return
+
+            with open(target_file, "r") as f:
+                data = json.load(f)
             access_token = data["access_token"]
 
     except Exception:
@@ -502,12 +505,27 @@ def set_access_token(token: str) -> str: # 设置并更新 Access Token
                 json.dump(data, f, indent=4)
 
             return "Access Token 已保存！\n已写入文件：~/.config/tchMaterial-parser/data.json"
+        elif os_name == "Darwin": # 在 macOS 上，将 Access Token 保存至 ~/Library/Application Support/tchMaterial-parser/data.json 文件中
+            target_dir = os.path.join(
+                os.path.expanduser("~"),
+                "Library",
+                "Application Support",
+                "tchMaterial-parser"
+            )
+            target_file = os.path.join(target_dir, "data.json")
+            os.makedirs(target_dir, exist_ok=True)
+
+            data = { "access_token": token }
+            with open(target_file, "w") as f:
+                json.dump(data, f, indent=4)
+
+            return "Access Token 已保存！\n已写入文件：~/Library/Application Support/tchMaterial-parser/data.json"
         else:
             return "Access Token 已保存！"
     except Exception:
         return "Access Token 已保存！"
 
-# 立即尝试加载已存的 Access Token（如果有的话）
+# 尝试加载已保存的 Access Token
 load_access_token()
 
 # 获取资源列表
@@ -537,7 +555,7 @@ else: # 在非 Windows 操作系统上，通过 Tkinter 估算缩放因子
 
 root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
 
-root.title("国家中小学智慧教育平台 资源下载工具 v3.1") # 设置窗口标题
+root.title("国家中小学智慧教育平台 资源下载工具 v3.2") # 设置窗口标题
 # root.geometry("900x600") # 设置窗口大小
 
 def set_icon() -> None: # 设置窗口图标
@@ -598,99 +616,64 @@ context_menu.add_command(label="粘贴 (Ctrl＋V)", command=lambda: url_text.eve
 
 def show_context_menu(event):
     context_menu.post(event.x_root, event.y_root)
-    # 绑定失焦事件，失焦时自动关闭菜单
-    context_menu.bind("<FocusOut>", lambda e: context_menu.unpost())
-    # 绑定左键点击事件，点击其他地方也关闭菜单
-    root.bind("<Button-1>", lambda e: context_menu.unpost(), add="+")
+    context_menu.bind("<FocusOut>", lambda e: context_menu.unpost()) # 绑定失焦事件，失焦时自动关闭菜单
+    root.bind("<Button-1>", lambda e: context_menu.unpost(), add="+") # 绑定左键点击事件，点击其他地方也关闭菜单
 
 # 绑定右键菜单到文本框（3 代表鼠标的右键按钮）
 url_text.bind("<Button-3>", show_context_menu)
 
-options = [["---"] + [resource_list[k]["display_name"] for k in resource_list], ["---"], ["---"], ["---"], ["---"], ["---"], ["---"], ["---"]] # 构建选择项
+options = [[resource_list[k]["display_name"] for k in resource_list], [], [], [], [], [], [], []] # 构建选择项
 
-variables = [tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root), tk.StringVar(root)]
+variables = [tk.StringVar(root, "资源类型"), tk.StringVar(root, "分类 1"), tk.StringVar(root, "分类 2"), tk.StringVar(root, "分类 3"), tk.StringVar(root, "分类 4"), tk.StringVar(root, "分类 5"), tk.StringVar(root, "分类 6"), tk.StringVar(root, "分类 7")]
 
 # 处理用户选择事件
 event_flag = False # 防止事件循环调用
 def selection_handler(index: int, *args) -> None:
     global event_flag
-
-    if event_flag:
-        event_flag = False # 检测到循环调用，重置标志位并返回
+    if event_flag: # 检测到循环调用
         return
+    event_flag = True
 
-    if variables[index].get() == "---": # 重置后面的选择项
-        for i in range(index + 1, len(drops)):
-            drops[i]["menu"].delete(0, "end")
-            drops[i]["menu"].add_command(label="---", command=tk._setit(variables[i], "---"))
+    current_hier = resource_list
+    end_flag = False # 是否到达最终目标
+    for i in range(index + 1): # 获取当前层级
+        try:
+            current_id = next(k for k, v in current_hier.items() if v["display_name"] == variables[i].get())
+            current_hier = current_hier[current_id]["children"]
+        except (StopIteration, KeyError): # 无法继续向下选择，说明已经到达最终目标
+            end_flag = True
+            break
 
-            event_flag = True
-            variables[i].set("---")
-            # drops[i]["menu"].configure(state="disabled")
-        return
-
-    if index < len(drops) - 1: # 更新选择项
+    if index < len(drops) - 1 and not end_flag: # 更新选择项
         current_drop = drops[index + 1]
+        variables[i + 1].set(f"分类 {i + 1}")
+        current_drop["menu"].delete(0, "end") # 删除当前菜单中的所有选项
 
-        current_hier = resource_list
-        current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[0].get()][0]
-        current_hier = current_hier[current_id]["children"]
-
-        end_flag = False # 是否到达最终目标
-        for i in range(index):
-            try:
-                current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[i + 1].get()][0]
-                current_hier = current_hier[current_id]["children"]
-            except KeyError: # 无法继续向下选择，说明已经到达最终目标
-                end_flag = True
-                break
-
-        if not current_hier or end_flag:
-            current_options = ["---"]
-        else:
-            current_options = ["---"] + [current_hier[k]["display_name"] for k in current_hier.keys()]
-
-        current_drop["menu"].delete(0, "end")
+        current_options = [current_hier[k]["display_name"] for k in current_hier.keys()]
         for choice in current_options:
-            current_drop["menu"].add_command(label=choice, command=tk._setit(variables[index + 1], choice))
+            current_drop["menu"].add_command(label=choice, command=partial(lambda index, choice: variables[index + 1].set(choice), index, choice)) # 添加当前菜单的选项
 
-        if end_flag: # 到达目标，显示 URL
-            current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[index].get()][0]
-            resource_type = current_hier[current_id]["resource_type_code"] or "assets_document"
-            if url_text.get("1.0", tk.END) == "\n": # URL 输入框为空的时候，插入的内容前面不加换行
-                url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
-            else:
-                url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
-            drops[-1]["menu"].delete(0, "end")
-            drops[-1]["menu"].add_command(label="---", command=tk._setit(variables[-1], "---"))
-            variables[-1].set("---")
+        current_drop.configure(state="active") # 恢复当前菜单
 
         for i in range(index + 2, len(drops)): # 重置后面的选择项
+            drops[i].configure(state="disabled") # 禁用后面的菜单
+            variables[i].set(f"分类 {i}")
             drops[i]["menu"].delete(0, "end")
-            drops[i]["menu"].add_command(label="---", command=tk._setit(variables[i], "---"))
-            # drops[i]["menu"].configure(state="disabled")
 
-        for i in range(index + 1, len(drops)):
-            event_flag = True
-            variables[i].set("---")
-
-    else: # 最后一项，必为最终目标，显示 URL
-        if variables[-1].get() == "---":
-            return
-
-        current_hier = resource_list
-        current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[0].get()][0]
-        current_hier = current_hier[current_id]["children"]
-        for i in range(index - 1):
-            current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[i + 1].get()][0]
-            current_hier = current_hier[current_id]["children"]
-
-        current_id = [element for element in current_hier if current_hier[element]["display_name"] == variables[index].get()][0]
+    if end_flag: # 到达目标，显示 URL
+        current_id = next(k for k, v in current_hier.items() if v["display_name"] == variables[index].get())
         resource_type = current_hier[current_id]["resource_type_code"] or "assets_document"
         if url_text.get("1.0", tk.END) == "\n": # URL 输入框为空的时候，插入的内容前面不加换行
             url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
         else:
             url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={current_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
+
+        for i in range(index + 1, len(drops)): # 重置后面的选择项
+            drops[i].configure(state="disabled") # 禁用后面的菜单
+            variables[i].set(f"分类 {i}")
+            drops[i]["menu"].delete(0, "end")
+
+    event_flag = False
 
 for index in range(8): # 绑定事件
     variables[index].trace_add("write", partial(selection_handler, index))
@@ -703,11 +686,10 @@ drops = []
 
 # 添加菜单栏
 for i in range(8):
-    drop = ttk.OptionMenu(dropdown_frame, variables[i], *options[i])
-    drop.config(state="active") # 配置下拉菜单为始终活跃状态，保证下拉菜单一直有形状
-    drop.bind("<Leave>", lambda e: "break") # 绑定鼠标移出事件，当鼠标移出下拉菜单时，执行 lambda 函数，“break”表示中止事件传递
+    drop = ttk.OptionMenu(dropdown_frame, variables[i], None, *options[i])
+    drop.configure(state="active" if i == 0 else "disabled") # 配置第一个下拉菜单为始终活跃状态，保证下拉菜单一直有形状
+    drop.bind("<Leave>", lambda e: "break") # 绑定鼠标移出事件，当鼠标移出下拉菜单时，执行 lambda 函数，“break” 表示中止事件传递
     drop.grid(row=i // 4, column=i % 4, padx=int(15 * scale), pady=int(15 * scale)) # 设置位置，2 行 4 列（跟随缩放）
-    variables[i].set("分类")
     drops.append(drop)
 
 # 按钮：设置 Token
