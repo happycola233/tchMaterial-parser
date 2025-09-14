@@ -36,7 +36,7 @@
 yay -S tchmaterial-parser
 ```
 
-感谢 [@iamzhz](https://github.com/iamzhz) 为本工具制作了发行包（#26）！
+感谢 [@iamzhz](https://github.com/iamzhz) 为本工具制作了发行包（[#26](../../issues/26)）！
 
 ## 🛠️使用方法
 
