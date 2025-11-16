@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-windows:
-    name: Build Windows App
+    name: Build Windows x64 App
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -20,14 +20,14 @@ jobs:
           python-version: '3.14'
       - name: Install dependencies
         run: |
+          python -m venv .venv
+          .venv\Scripts\activate
           python -m pip install --upgrade pip
           pip install pyinstaller
-          # If you have requirements.txt, uncomment the next line:
           pip install -r requirements.txt
       - name: Build app with PyInstaller
         run: |
           pyinstaller ./tchMaterial-parser.spec
-          # The output binary will be in dist/tchMaterial-parser
           cd dist
           mv tchMaterial-parser.exe tchMaterial-parser-windows-x64.exe
       - name: Upload Release Asset
@@ -38,7 +38,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux:
-    name: Build Linux App
+    name: Build Linux x64 App
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -49,14 +49,14 @@ jobs:
           python-version: '3.14'
       - name: Install dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install pyinstaller
-          # If you have requirements.txt, uncomment the next line:
           pip install -r requirements.txt
       - name: Build app with PyInstaller
         run: |
           pyinstaller ./tchMaterial-parser.spec
-          # The output binary will be in dist/tchMaterial-parser
           cd dist
           mv tchMaterial-parser tchMaterial-parser-linux-x64
       - name: Upload Release Asset
@@ -66,8 +66,37 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build-linux-arm64:
+    name: Build Linux ARM64 App
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+      - name: Build app with PyInstaller
+        run: |
+          pyinstaller ./tchMaterial-parser.spec
+          cd dist
+          mv tchMaterial-parser tchMaterial-parser-linux-arm64
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/tchMaterial-parser-linux-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-macos:
-    name: Build macOS App
+    name: Build macOS ARM64 App
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -78,16 +107,16 @@ jobs:
           python-version: '3.14'
       - name: Install dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install pyinstaller
-          # If you have requirements.txt, uncomment the next line:
           pip install -r requirements.txt
       - name: Build app with PyInstaller
         run: |
           pyinstaller ./tchMaterial-parser.spec
-          # The output binary will be in dist/tchMaterial-parser
           cd dist
-          mv tchMaterial-parser.app tchMaterial-parser-mac-arm64.app
+          mv tchMaterial-parser tchMaterial-parser-mac-arm64.app
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
