@@ -7,6 +7,10 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
 
 jobs:
   build-windows:
@@ -35,6 +39,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/tchMaterial-parser-windows-x64.exe
+          tag_name: ${{ inputs.tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -64,6 +69,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/tchMaterial-parser-linux-x64
+          tag_name: ${{ inputs.tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -93,6 +99,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/tchMaterial-parser-linux-arm64
+          tag_name: ${{ inputs.tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -125,5 +132,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/tchMaterial-parser-mac-arm64.zip
+          tag_name: ${{ inputs.tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
