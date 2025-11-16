@@ -1,5 +1,8 @@
 name: Build & Release macOS App
 
+permissions:
+  contents: write
+
 on:
   release:
     types: [published]
