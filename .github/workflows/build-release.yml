@@ -27,7 +27,7 @@ jobs:
           pip install -r requirements.txt
       - name: Build app with PyInstaller
         run: |
-          pyinstaller ./tchMaterial-parser.spec
+          .venv\Scripts\pyinstaller ./tchMaterial-parser.spec
           cd dist
           mv tchMaterial-parser.exe tchMaterial-parser-windows-x64.exe
       - name: Upload Release Asset
@@ -56,7 +56,7 @@ jobs:
           pip install -r requirements.txt
       - name: Build app with PyInstaller
         run: |
-          pyinstaller ./tchMaterial-parser.spec
+          .venv/bin/pyinstaller ./tchMaterial-parser.spec
           cd dist
           mv tchMaterial-parser tchMaterial-parser-linux-x64
       - name: Upload Release Asset
@@ -85,7 +85,7 @@ jobs:
           pip install -r requirements.txt
       - name: Build app with PyInstaller
         run: |
-          pyinstaller ./tchMaterial-parser.spec
+          .venv/bin/pyinstaller ./tchMaterial-parser.spec
           cd dist
           mv tchMaterial-parser tchMaterial-parser-linux-arm64
       - name: Upload Release Asset
@@ -114,7 +114,7 @@ jobs:
           pip install -r requirements.txt
       - name: Build app with PyInstaller
         run: |
-          pyinstaller ./tchMaterial-parser.spec
+          .venv/bin/pyinstaller ./tchMaterial-parser.spec
           cd dist
           mv tchMaterial-parser tchMaterial-parser-mac-arm64.app
       - name: Upload Release Asset
