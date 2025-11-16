@@ -115,11 +115,14 @@ jobs:
       - name: Build app with PyInstaller
         run: |
           .venv/bin/pyinstaller ./tchMaterial-parser.spec
+      - name: Create zip archive
+        run: |
           cd dist
           mv tchMaterial-parser tchMaterial-parser-mac-arm64.app
+          zip -r tchMaterial-parser-mac-arm64.zip tchMaterial-parser-mac-arm64.app
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/tchMaterial-parser-mac-arm64.app
+          files: dist/tchMaterial-parser-mac-arm64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
