@@ -1,5 +1,8 @@
 name: Build & Release
 
+permissions:
+  contents: write
+
 on:
   release:
     types: [published]
