@@ -108,11 +108,11 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4  # 建议用 v4
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5 # 建议用 v5
         with:
-          python-version: '3.14'
+          python-version: '3.12' # 建议用稳定版
       - name: Install dependencies
         run: |
           python -m venv .venv
@@ -122,12 +122,20 @@ jobs:
           pip install -r requirements.txt
       - name: Build app with PyInstaller
         run: |
-          .venv/bin/pyinstaller ./tchMaterial-parser.spec
+          # 显式指定生成单文件
+          .venv/bin/pyinstaller --clean --onefile ./tchMaterial-parser.spec
+      
+      - name: Sign binary
+        run: |
+          # 修复 macOS ARM64 无法运行的问题
+          codesign --force --deep --sign - dist/tchMaterial-parser
+
       - name: Create zip archive
         run: |
           cd dist
-          mv tchMaterial-parser tchMaterial-parser-mac-arm64.app
-          zip -r tchMaterial-parser-mac-arm64.zip tchMaterial-parser-mac-arm64.app
+          mv tchMaterial-parser tchMaterial-parser-mac-arm64
+          chmod +x tchMaterial-parser-mac-arm64
+          zip -r tchMaterial-parser-mac-arm64.zip tchMaterial-parser-mac-arm64
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
