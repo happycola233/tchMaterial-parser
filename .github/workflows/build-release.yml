@@ -108,11 +108,11 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4  # 建议用 v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5 # 建议用 v5
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.12' # 建议用稳定版
+          python-version: '3.12' # 建议改用 3.12 稳定版，3.14 太新可能导致其他问题
       - name: Install dependencies
         run: |
           python -m venv .venv
@@ -120,22 +120,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
+      
       - name: Build app with PyInstaller
         run: |
-          # 显式指定生成单文件
-          .venv/bin/pyinstaller --clean --onefile ./tchMaterial-parser.spec
-      
-      - name: Sign binary
+          # 1. 去掉 --onefile，因为 .spec 文件里已经包含配置了
+          # 2. 加上 --clean 清理缓存
+          .venv/bin/pyinstaller --clean ./tchMaterial-parser.spec
+
+      - name: Sign the binary
         run: |
-          # 修复 macOS ARM64 无法运行的问题
+          # 【关键步骤】对生成的二进制文件进行 Ad-hoc 签名
+          # 假设 spec 文件生成的默认名字是 tchMaterial-parser
           codesign --force --deep --sign - dist/tchMaterial-parser
 
       - name: Create zip archive
         run: |
           cd dist
+          # 【关键步骤】不要重命名为 .app！
+          # 直接改名为更有辨识度的名字（无后缀，或者加 .command）
           mv tchMaterial-parser tchMaterial-parser-mac-arm64
+          
+          # 赋予可执行权限
           chmod +x tchMaterial-parser-mac-arm64
+          
+          # 压缩
           zip -r tchMaterial-parser-mac-arm64.zip tchMaterial-parser-mac-arm64
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
