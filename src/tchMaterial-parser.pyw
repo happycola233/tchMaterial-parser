@@ -200,10 +200,10 @@ def add_bookmarks(pdf_path: str, chapters: list) -> None:
                 title = chapter.get("title", "未知章节")
                 # 1. 获取原始值
                 p_index = chapter.get("page_index")
-                print(f"处理章节“{title}”，页码索引：{p_index}")
+                # print(f"处理章节“{title}”，页码索引：{p_index}")
                 # 2. 如果值为 None (JSON里的null) 或者不存在，跳过这个书签（因为未使用）
                 if p_index is None:
-                    sys.stderr.write(f"跳过章节“{title}”的书签，原因：未指定页码\n")
+                    sys.stderr.write(f"[!!]跳过章节“{title}”的书签，原因：未指定页码\n")
                     continue
                 # 3. 尝试将其转为整数并减 1 (pypdf 页码从 0 开始)
                 try:
