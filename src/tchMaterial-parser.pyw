@@ -261,7 +261,7 @@ def download_file(url: str, save_path: str, chapters: list = None) -> None: # �
                         download_progress_bar["value"] = download_progress # 更新进度条
                         progress_label.config(text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
             if chapters:
-                progress_label.config(text=f"正在添加书签: {os.path.basename(save_path)}...")
+                progress_label.config(text=f"添加书签")
                 add_bookmarks(save_path, chapters)
             current_state["downloaded_size"] = current_state["total_size"]
             current_state["finished"] = True
