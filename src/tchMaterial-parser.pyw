@@ -198,8 +198,18 @@ def add_bookmarks(pdf_path: str, chapters: list) -> None:
         def _add_chapter(chapter_list, parent=None):
             for chapter in chapter_list:
                 title = chapter.get("title", "未知章节")
-
-                page_num = chapter.get("page_index", 1) - 1
+                # 1. 获取原始值
+                p_index = chapter.get("page_index")
+                
+                # 2. 如果值为 None (JSON里的null) 或者不存在，跳过这个书签（因为未使用）
+                if p_index is None:
+                    break
+                # 3. 尝试将其转为整数并减 1 (pypdf 页码从 0 开始)
+                try:
+                    page_num = int(p_index) - 1
+                except (ValueError, TypeError):
+                    page_num = 0 # 如果转换失败，默认指向第1页
+                # page_num = chapter.get("page_index", 1) - 1
                 if page_num < 0: page_num = 0
                 
                 if page_num >= len(writer.pages):
