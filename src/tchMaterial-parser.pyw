@@ -117,8 +117,8 @@ def parse(url: str) -> tuple[str, str, str, list] | tuple[None, None, None, None
                             def process_tree_nodes(nodes):
                                 result = []
                                 for node in nodes:
-                                    # 从 page_map 中找页码，找不到默认为1
-                                    page_num = page_map.get(node["id"], 1)
+                                    # 从 page_map 中找页码，找不到为none
+                                    page_num = page_map.get(node["id"], None)
                                     
                                     chapter_item = {
                                         "title": node["title"],
@@ -200,10 +200,11 @@ def add_bookmarks(pdf_path: str, chapters: list) -> None:
                 title = chapter.get("title", "未知章节")
                 # 1. 获取原始值
                 p_index = chapter.get("page_index")
-                
+                print(f"处理章节“{title}”，页码索引：{p_index}")
                 # 2. 如果值为 None (JSON里的null) 或者不存在，跳过这个书签（因为未使用）
                 if p_index is None:
-                    break
+                    sys.stderr.write(f"跳过章节“{title}”的书签，原因：未指定页码\n")
+                    continue
                 # 3. 尝试将其转为整数并减 1 (pypdf 页码从 0 开始)
                 try:
                     page_num = int(p_index) - 1
