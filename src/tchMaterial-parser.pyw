@@ -11,13 +11,14 @@ import os, sys, platform
 from functools import partial
 import threading, psutil, tempfile, pyperclip
 import base64, json, re, requests
+from pypdf import PdfReader, PdfWriter
 
 os_name = platform.system() # 获取操作系统类型
 
 if os_name == "Windows": # 在 Windows 操作系统下，导入 Windows 相关库
     import win32print, win32gui, win32con, win32api, ctypes, winreg
 
-def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 URL
+def parse(url: str) -> tuple[str, str, str, list] | tuple[None, None, None, None]: 
     try:
         content_id, content_type, resource_url = None, None, None
 
@@ -27,7 +28,7 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
                 content_id = q.split("=")[1]
                 break
         if not content_id:
-            return None, None, None
+            return None, None, None, None
 
         for q in url[url.find("?") + 1:].split("&"):
             if q.split("=")[0] == "contentType":
@@ -66,8 +67,96 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
                 response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
             else: # 对普通电子课本的解析
                 response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
-
+        
         data = response.json()
+        title = data.get("title", "未知教材")
+        
+        # 3. 获取章节目录 (核心修改部分)
+        chapters = data.get("chapters", [])
+        
+        # 如果主接口没目录，尝试通过 ebook_mapping + tree 接口组合获取
+        if not chapters:
+            mapping_url = None
+            for item in data.get("ti_items", []):
+                if item.get("ti_file_flag") == "ebook_mapping":
+                    mapping_url = item["ti_storages"][0]
+                    break
+            
+            if mapping_url:
+                try:
+                    if not access_token:
+                        mapping_url = re.sub(
+                            r"^https?://(?:.+).ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}).pkg/(.+)$", 
+                            r"https://c1.ykt.cbern.com.cn/\1/\2.pkg/\3", 
+                            mapping_url
+                        )
+                    
+                    # A. 下载 mapping 文件获取页码和 ebook_id
+                    map_resp = session.get(mapping_url)
+                    map_resp.encoding = 'utf-8'
+                    map_data = map_resp.json()
+                    
+                    ebook_id = map_data.get("ebook_id")
+                    
+                    # 构建 nodeId 到 pageNumber 的映射字典
+                    # 格式: { "node_id_1": 5, "node_id_2": 10 }
+                    page_map = {}
+                    if "mappings" in map_data:
+                        for m in map_data["mappings"]:
+                            page_map[m["node_id"]] = m.get("page_number", 1)
+
+                    # B. 如果有 ebook_id，去下载完整的目录树 (Tree API)
+                    if ebook_id:
+                        tree_url = f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/national_lesson/trees/{ebook_id}.json"
+                        tree_resp = session.get(tree_url)
+                        
+                        if tree_resp.status_code == 200:
+                            tree_data = tree_resp.json()
+                            
+                            # 递归函数：合并 Tree的标题 和 Mapping的页码
+                            def process_tree_nodes(nodes):
+                                result = []
+                                for node in nodes:
+                                    # 从 page_map 中找页码，找不到默认为1
+                                    page_num = page_map.get(node["id"], 1)
+                                    
+                                    chapter_item = {
+                                        "title": node["title"],
+                                        "page_index": page_num 
+                                    }
+                                    
+                                    # 如果有子节点，递归处理
+                                    if node.get("child_nodes"):
+                                        chapter_item["children"] = process_tree_nodes(node["child_nodes"])
+                                    
+                                    result.append(chapter_item)
+                                return result
+
+                            # 开始解析
+                            if isinstance(tree_data, list):
+                                chapters = process_tree_nodes(tree_data)
+                            elif isinstance(tree_data, dict) and "child_nodes" in tree_data:
+                                chapters = process_tree_nodes(tree_data["child_nodes"])
+                                
+                            # print(f"成功获取完整目录: {len(chapters)} 个顶级章节")
+
+                    # C. 兜底方案：如果获取 Tree 失败，仅使用 mapping 生成纯页码索引
+                    if not chapters and "mappings" in map_data:
+                        temp_chapters = []
+                        mappings = map_data["mappings"]
+                        mappings.sort(key=lambda x: x["page_number"])
+                        for i, m in enumerate(mappings):
+                            temp_chapters.append({
+                                "title": f"第 {i+1} 节 (P{m['page_number']})",
+                                "page_index": m['page_number']
+                            })
+                        chapters = temp_chapters
+                        
+                except Exception as e:
+                    print(f"目录解析异常: {e}")
+
+        # 4. 获取 PDF 下载链接 (保持不变)
+        
         for item in list(data["ti_items"]):
             if item["lc_ti_format"] == "pdf": # 寻找存有 PDF 链接列表的项
                 resource_url: str = item["ti_storages"][0] # 获取并构造 PDF 的 URL
@@ -88,15 +177,53 @@ def parse(url: str) -> tuple[str, str, str] | tuple[None, None, None]: # 解析 
                                     resource_url = re.sub(r"^https?://(?:.+).ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}).pkg/(.+)\.pdf$", r"https://c1.ykt.cbern.com.cn/\1/\2.pkg/\3.pdf", resource_url)
                                 break
                 if not resource_url:
-                    return None, None, None
+                    return None, None, None, None
             else:
-                return None, None, None
+                return None, None, None, None
 
-        return resource_url, content_id, data["title"]
-    except Exception: # 解析失败时返回 None
-        return None, None, None
+        return resource_url, content_id, title, chapters
+    except Exception: 
+        return None, None, None, None
+    
+def add_bookmarks(pdf_path: str, chapters: list) -> None:
+    """给 PDF 添加书签"""
+    try:
+        if not chapters:
+            return
+        reader = PdfReader(pdf_path)
+        writer = PdfWriter()
+        writer.append_pages_from_reader(reader)
 
-def download_file(url: str, save_path: str) -> None: # 下载文件
+        # 递归添加书签的内部函数
+        def _add_chapter(chapter_list, parent=None):
+            for chapter in chapter_list:
+                title = chapter.get("title", "未知章节")
+
+                page_num = chapter.get("page_index", 1) - 1
+                if page_num < 0: page_num = 0
+                
+                if page_num >= len(writer.pages):
+                    page_num = len(writer.pages) - 1
+
+                # 添加书签
+                # parent 是父级书签对象，用于处理多级目录
+                bookmark = writer.add_outline_item(title, page_num, parent=parent)
+
+                # 如果有子章节（children），递归添加
+                if "children" in chapter and chapter["children"]:
+                    _add_chapter(chapter["children"], parent=bookmark)
+        
+        # 开始处理章节数据
+        _add_chapter(chapters)
+
+        # 保存修改后的文件
+        with open(pdf_path, "wb") as f:
+            writer.write(f)
+            
+    except Exception as e:
+        sys.stderr.write(f"添加书签失败: {e}\n")
+
+def download_file(url: str, save_path: str, chapters: list = None) -> None: # 下载文件
     global download_states
     current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None }
     download_states.append(current_state)
@@ -123,7 +250,9 @@ def download_file(url: str, save_path: str) -> None: # 下载文件
                         download_progress = (all_downloaded_size / all_total_size) * 100
                         download_progress_bar["value"] = download_progress # 更新进度条
                         progress_label.config(text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
-
+            if chapters:
+                progress_label.config(text=f"正在添加书签: {os.path.basename(save_path)}...")
+                add_bookmarks(save_path, chapters)
             current_state["downloaded_size"] = current_state["total_size"]
             current_state["finished"] = True
 
@@ -188,7 +317,8 @@ def download() -> None: # 下载资源文件
         dir_path = None
 
     for url in urls:
-        resource_url, content_id, title = parse(url)
+        # resource_url, content_id, title  = parse(url)
+        resource_url, content_id, title , chapters = parse(url)
         if not resource_url:
             failed_links.append(url) # 添加到失败链接
             continue
@@ -205,7 +335,8 @@ def download() -> None: # 下载资源文件
             if os_name == "Windows":
                 save_path = save_path.replace("/", "\\")
 
-        thread_it(download_file, (resource_url, save_path)) # 开始下载（多线程，防止窗口卡死）
+        # thread_it(download_file, (resource_url, save_path)) # 开始下载（多线程，防止窗口卡死）
+        thread_it(download_file, (resource_url, save_path, chapters)) # 开始下载（多线程，防止窗口卡死）
 
     if failed_links:
         messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
