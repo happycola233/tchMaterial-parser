@@ -217,7 +217,9 @@ def add_bookmarks(pdf_path: str, chapters: list) -> None:
                 # print(f"处理章节“{title}”，页码索引：{p_index}")
                 # 2. 如果值为 None (JSON里的null) 或者不存在，跳过这个书签（因为未使用）
                 if p_index is None:
-                    sys.stderr.write(f"[!!]跳过章节“{title}”的书签，原因：未指定页码\n")
+                    # 无控制台运行时（pyw/exe）sys.stderr 可能为 None，需保护。
+                    if sys.stderr is not None:
+                        sys.stderr.write(f"[!!]跳过章节“{title}”的书签，原因：未指定页码\n")
                     continue
                 # 3. 尝试将其转为整数并减 1 (pypdf 页码从 0 开始)
                 try:
@@ -246,8 +248,10 @@ def add_bookmarks(pdf_path: str, chapters: list) -> None:
             writer.write(f)
             
     except Exception as e:
-        sys.stderr.write(f"添加书签失败: {e}\n")
-        traceback.print_exc()
+        # 无控制台运行时（pyw/exe）sys.stderr 可能为 None，需保护。
+        if sys.stderr is not None:
+            sys.stderr.write(f"添加书签失败: {e}\n")
+            traceback.print_exc()
 
 def ui_call(func, *args, **kwargs) -> None:
     """在主线程执行 Tk UI 更新"""
@@ -289,7 +293,7 @@ def download_file(url: str, save_path: str, chapters: list | None = None) -> Non
     except Exception as e:
         current_state["downloaded_size"], current_state["total_size"] = 0, 0
         current_state["finished"] = True
-        current_state["failed_reason"] = str(e)
+        current_state["failed_reason"] = traceback.format_exc().rstrip()
 
     if all(state["finished"] for state in download_states): # 所有文件下载完成
         ui_call(download_progress_bar.config, value=0) # 重置进度条
@@ -298,7 +302,15 @@ def download_file(url: str, save_path: str, chapters: list | None = None) -> Non
 
         failed_states = [state for state in download_states if state["failed_reason"]]
         if len(failed_states) > 0: # 存在下载失败的文件
-            ui_call(messagebox.showwarning, "下载完成", f"文件已下载到：{os.path.dirname(save_path)}\n以下文件下载失败：\n{"\n".join(f"{state["download_url"]}，原因：{state["failed_reason"]}" for state in failed_states)}")
+            failed_message = "\n\n".join(
+                f"{state.get('download_url')}\n{state.get('failed_reason')}"
+                for state in failed_states
+            )
+            ui_call(
+                messagebox.showwarning,
+                "下载完成",
+                f"文件已下载到：{os.path.dirname(save_path)}\n以下文件下载失败：\n{failed_message}",
+            )
         else:
             ui_call(messagebox.showinfo, "下载完成", f"文件已下载到：{os.path.dirname(save_path)}")
 
