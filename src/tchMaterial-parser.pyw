@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 资源下载工具 v3.3.0
+# 国家中小学智慧教育平台 资源下载工具 v3.3.2
 # 项目地址：https://github.com/happycola233/tchMaterial-parser
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
 
+# 导入相关库
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import tkinter.font as tkfont
@@ -15,25 +16,27 @@ import traceback
 
 os_name = platform.system() # 获取操作系统类型
 
-try: # 在 Windows 操作系统下，导入 Windows 相关库，这样的写法是为了避免 Pylance “reportPossiblyUnboundVariable”
-    import win32print, win32gui, win32con, win32api, ctypes, winreg
-except Exception:
+if os_name == "Windows": # 在 Windows 操作系统下，导入 Windows 相关库
+    try:
+        import win32print, win32gui, win32con, win32api, ctypes, winreg
+    except Exception:
+        win32print = win32gui = win32con = win32api = ctypes = winreg = None
+else:
     win32print = win32gui = win32con = win32api = ctypes = winreg = None
 
-
-def parse(url: str) -> tuple[str, str, str, list] | tuple[None, None, None, None]: 
+def parse(url: str, bookmarks: bool) -> tuple[str, str, list] | tuple[None, None, None]: # 解析资源，获取资源下载链接
     try:
+        # 1. 简单提取 URL 中的 contentId 与 contentType（为了减少导入的库，使用了不严谨的方法）
         content_id: str | None = None
         content_type: str | None = None
         resource_url: str | None = None
 
-        # 简单提取 URL 中的 contentId 与 contentType（为了减少导入的库，使用了不严谨的方法）
         for q in url[url.find("?") + 1:].split("&"):
             if q.split("=")[0] == "contentId":
                 content_id = q.split("=")[1]
                 break
         if not content_id:
-            return None, None, None, None
+            return None, None, None
 
         for q in url[url.find("?") + 1:].split("&"):
             if q.split("=")[0] == "contentType":
@@ -42,7 +45,8 @@ def parse(url: str) -> tuple[str, str, str, list] | tuple[None, None, None, None
         if not content_type:
             content_type = "assets_document"
 
-        # 获得该 contentId 下资源的信息，返回数据示例：
+        # 2. 获得资源的信息
+        # 返回数据示例：
         """
         {
             "id": "4f64356a-8df7-4579-9400-e32c9a7f6718",
@@ -72,105 +76,107 @@ def parse(url: str) -> tuple[str, str, str, list] | tuple[None, None, None, None
                 response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
             else: # 对普通电子课本的解析
                 response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
-        
+
         data = response.json()
         title = data.get("title", "未知教材")
-        
-        # 3. 获取章节目录 (核心修改部分)
-        chapters = data.get("chapters", [])
-        
-        # 如果主接口没目录，尝试通过 ebook_mapping + tree 接口组合获取
-        if not chapters:
-            mapping_url = None
-            for item in data.get("ti_items", []):
-                if item.get("ti_file_flag") == "ebook_mapping":
-                    # 形如 https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/*.pkg/ebook_mapping_*.txt
-                    mapping_url = item["ti_storages"][0]
-                    break
-            
-            if mapping_url:
-                try:
-                    # A. 下载 mapping 文件获取页码和 ebook_id
-                    # 直接请求原始 mapping 地址（不带请求头）
-                    map_data = None
-                    map_resp = session.get(mapping_url)
-                    if map_resp.status_code == 200:
-                        map_resp.encoding = 'utf-8'
-                        try:
-                            map_data = map_resp.json()
-                        except Exception:
-                            # 响应不是 JSON（可能是 XML/错误页）
-                            map_data = None
-                    # 无法解析时直接报错
-                    if not map_data:
-                        raise RuntimeError("mapping 文件无法访问或不是有效的 JSON")
 
-                    ebook_id = map_data.get("ebook_id")
-                    
-                    # 构建 nodeId 到 pageNumber 的映射字典
-                    # 格式: { "node_id_1": 5, "node_id_2": 10 }
-                    page_map = {}
-                    if "mappings" in map_data:
-                        for m in map_data["mappings"]:
-                            page_map[m["node_id"]] = m.get("page_number", 1)
+        # 3. 获取章节目录
+        if bookmarks:
+            chapters = data.get("chapters", [])
 
-                    # B. 如果有 ebook_id，去下载完整的目录树 (Tree API)
-                    if ebook_id:
-                        tree_url = f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/national_lesson/trees/{ebook_id}.json"
-                        tree_resp = session.get(tree_url, headers=headers if access_token else None)
-                        
-                        if tree_resp.status_code == 200:
-                            tree_data = tree_resp.json()
-                            
-                            # 递归函数：合并 Tree的标题 和 Mapping的页码
-                            def process_tree_nodes(nodes):
-                                result = []
-                                for node in nodes:
-                                    # 从 page_map 中找页码，找不到为none
-                                    page_num = page_map.get(node["id"], None)
-                                    
-                                    chapter_item = {
-                                        "title": node["title"],
-                                        "page_index": page_num 
-                                    }
-                                    
-                                    # 如果有子节点，递归处理
-                                    if node.get("child_nodes"):
-                                        chapter_item["children"] = process_tree_nodes(node["child_nodes"])
-                                    
-                                    result.append(chapter_item)
-                                return result
+            # 如果主接口没目录，尝试通过 ebook_mapping + tree 接口组合获取
+            if not chapters:
+                mapping_url = None
+                for item in data.get("ti_items", []):
+                    if item.get("ti_file_flag") == "ebook_mapping":
+                        # 形如 https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/*.pkg/ebook_mapping_*.txt
+                        mapping_url = item["ti_storages"][0]
+                        break
 
-                            # 开始解析
-                            if isinstance(tree_data, list):
-                                chapters = process_tree_nodes(tree_data)
-                            elif isinstance(tree_data, dict) and "child_nodes" in tree_data:
-                                chapters = process_tree_nodes(tree_data["child_nodes"])
-                                
-                            # print(f"成功获取完整目录: {len(chapters)} 个顶级章节")
+                if mapping_url:
+                    try:
+                        # A. 下载 mapping 文件获取页码和 ebook_id
+                        # 直接请求原始 mapping 地址（不带请求头）
+                        map_data = None
+                        map_resp = session.get(mapping_url)
+                        if map_resp.status_code == 200:
+                            map_resp.encoding = "utf-8"
+                            try:
+                                map_data = map_resp.json()
+                            except Exception:
+                                # 响应不是 JSON（可能是 XML/错误页）
+                                map_data = None
+                        # 无法解析时直接报错
+                        if not map_data:
+                            raise RuntimeError("mapping 文件无法访问或不是有效的 JSON")
 
-                    # C. 兜底方案：如果获取 Tree 失败，仅使用 mapping 生成纯页码索引
-                    if not chapters and "mappings" in map_data:
-                        temp_chapters = []
-                        mappings = map_data["mappings"]
-                        mappings.sort(key=lambda x: x["page_number"])
-                        for i, m in enumerate(mappings):
-                            temp_chapters.append({
-                                "title": f"第 {i+1} 节 (P{m['page_number']})",
-                                "page_index": m['page_number']
-                            })
-                        chapters = temp_chapters
-                        
-                except Exception as e:
-                    print(f"目录解析异常: {e}")
-                    traceback.print_exc()
+                        ebook_id = map_data.get("ebook_id")
 
-        # 4. 获取 PDF 下载链接 (保持不变)
-        
+                        # 构建 nodeId 到 pageNumber 的映射字典
+                        # 格式: { "node_id_1": 5, "node_id_2": 10 }
+                        page_map = {}
+                        if "mappings" in map_data:
+                            for m in map_data["mappings"]:
+                                page_map[m["node_id"]] = m.get("page_number", 1)
+
+                        # B. 如果有 ebook_id，去下载完整的目录树 (Tree API)
+                        if ebook_id:
+                            tree_url = f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/national_lesson/trees/{ebook_id}.json"
+                            tree_resp = session.get(tree_url, headers=headers if access_token else None)
+
+                            if tree_resp.status_code == 200:
+                                tree_data = tree_resp.json()
+
+                                # 递归函数：合并 Tree的标题 和 Mapping的页码
+                                def process_tree_nodes(nodes):
+                                    result = []
+                                    for node in nodes:
+                                        # 从 page_map 中找页码，找不到为none
+                                        page_num = page_map.get(node["id"], None)
+
+                                        chapter_item = {
+                                            "title": node["title"],
+                                            "page_index": page_num
+                                        }
+
+                                        # 如果有子节点，递归处理
+                                        if node.get("child_nodes"):
+                                            chapter_item["children"] = process_tree_nodes(node["child_nodes"])
+
+                                        result.append(chapter_item)
+                                    return result
+
+                                # 开始解析
+                                if isinstance(tree_data, list):
+                                    chapters = process_tree_nodes(tree_data)
+                                elif isinstance(tree_data, dict) and "child_nodes" in tree_data:
+                                    chapters = process_tree_nodes(tree_data["child_nodes"])
+
+                                # print(f"成功获取完整目录: {len(chapters)} 个顶级章节")
+
+                        # C. 兜底方案：如果获取 Tree 失败，仅使用 mapping 生成纯页码索引
+                        if not chapters and "mappings" in map_data:
+                            temp_chapters = []
+                            mappings = map_data["mappings"]
+                            mappings.sort(key=lambda x: x["page_number"])
+                            for i, m in enumerate(mappings):
+                                temp_chapters.append({
+                                    "title": f"第 {i+1} 节 (P{m["page_number"]})",
+                                    "page_index": m["page_number"]
+                                })
+                            chapters = temp_chapters
+
+                    except Exception as e:
+                        print(f"目录解析异常: {e}")
+                        traceback.print_exc()
+        else:
+            chapters = []
+
+        # 4. 获取资源下载链接
         for item in list(data["ti_items"]):
             if item["lc_ti_format"] == "pdf": # 寻找存有 PDF 链接列表的项
                 resource_url = item["ti_storages"][0] # 获取并构造 PDF 的 URL
-                if resource_url is None:
+                if not resource_url:
                     continue
                 if not access_token: # 未登录时，通过一个不可靠的方法构造可直接下载的 URL
                     resource_url = re.sub(r"^https?://(?:.+).ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}).pkg/(.+)\.pdf$", r"https://c1.ykt.cbern.com.cn/\1/\2.pkg/\3.pdf", resource_url)
@@ -185,80 +191,83 @@ def parse(url: str) -> tuple[str, str, str, list] | tuple[None, None, None, None
                         for item in list(resource["ti_items"]):
                             if item["lc_ti_format"] == "pdf":
                                 resource_url = item["ti_storages"][0]
-                                if resource_url is None:
+                                if not resource_url:
                                     continue
                                 if not access_token:
                                     resource_url = re.sub(r"^https?://(?:.+).ykt.cbern.com.cn/(.+)/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}).pkg/(.+)\.pdf$", r"https://c1.ykt.cbern.com.cn/\1/\2.pkg/\3.pdf", resource_url)
                                 break
                 if not resource_url:
-                    return None, None, None, None
+                    return None, None, None
             else:
-                return None, None, None, None
+                return None, None, None
 
-        return resource_url, content_id, title, chapters
-    except Exception: 
-        return None, None, None, None
-    
-def add_bookmarks(pdf_path: str, chapters: list) -> None:
-    """给 PDF 添加书签"""
-    try:
-        if not chapters:
+        return resource_url, title, chapters
+    except Exception:
+        return None, None, None
+
+def parse_and_copy() -> None: # 解析并复制链接
+    urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()] # 获取所有非空行
+    resource_links = []
+    failed_links = []
+
+    for url in urls:
+        resource_url = parse(url, False)[0]
+        if not resource_url:
+            failed_links.append(url) # 添加到失败链接
+            continue
+        resource_links.append(resource_url)
+
+    if failed_links:
+        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links))
+
+    if resource_links:
+        pyperclip.copy("\n".join(resource_links)) # 将链接复制到剪贴板
+        messagebox.showinfo("提示", "资源链接已复制到剪贴板")
+
+def download() -> None: # 下载资源文件
+    global download_states
+    download_btn.config(state="disabled") # 设置下载按钮为禁用状态
+    download_states = [] # 初始化下载状态
+    urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()] # 获取所有非空行
+    failed_links = []
+
+    if len(urls) > 1:
+        messagebox.showinfo("提示", "您选择了多个链接，将在选定的文件夹中使用教材名称作为文件名进行下载。")
+        dir_path = filedialog.askdirectory() # 选择文件夹
+        if not dir_path: # 用户取消或关闭对话框
+            download_btn.config(state="normal") # 恢复下载按钮为启用状态
             return
-        reader = PdfReader(pdf_path)
-        writer = PdfWriter()
-        writer.append_pages_from_reader(reader)
+        dir_path = os.path.normpath(dir_path)
+    else:
+        dir_path = None
 
-        # 递归添加书签的内部函数
-        def _add_chapter(chapter_list, parent=None):
-            for chapter in chapter_list:
-                title = chapter.get("title", "未知章节")
-                # 1. 获取原始值
-                p_index = chapter.get("page_index")
-                # print(f"处理章节“{title}”，页码索引：{p_index}")
-                # 2. 如果值为 None (JSON里的null) 或者不存在，跳过这个书签（因为未使用）
-                if p_index is None:
-                    # 无控制台运行时（pyw/exe）sys.stderr 可能为 None，需保护。
-                    if sys.stderr is not None:
-                        sys.stderr.write(f"[!!]跳过章节“{title}”的书签，原因：未指定页码\n")
-                    continue
-                # 3. 尝试将其转为整数并减 1 (pypdf 页码从 0 开始)
-                try:
-                    page_num = int(p_index) - 1
-                except (ValueError, TypeError):
-                    page_num = 0 # 如果转换失败，默认指向第1页
-                # page_num = chapter.get("page_index", 1) - 1
-                if page_num < 0: page_num = 0
-                
-                if page_num >= len(writer.pages):
-                    page_num = len(writer.pages) - 1
+    for url in urls:
+        resource_url, title, chapters = parse(url, bookmark_var.get())
+        if not resource_url:
+            failed_links.append(url) # 添加到失败链接
+            continue
 
-                # 添加书签
-                # parent 是父级书签对象，用于处理多级目录
-                bookmark = writer.add_outline_item(title, page_num, parent=parent)
+        if dir_path:
+            default_filename = title or "download"
+            save_path = os.path.join(dir_path, f"{default_filename}.pdf") # 构造完整路径
+        else:
+            default_filename = title or "download"
+            save_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF 文件", "*.pdf"), ("所有文件", "*.*")], initialfile = default_filename) # 选择保存路径
+            if not save_path: # 用户取消了文件保存操作
+                download_btn.config(state="normal") # 恢复下载按钮为启用状态
+                return
+            save_path = os.path.normpath(save_path)
 
-                # 如果有子章节（children），递归添加
-                if "children" in chapter and chapter["children"]:
-                    _add_chapter(chapter["children"], parent=bookmark)
-        
-        # 开始处理章节数据
-        _add_chapter(chapters)
+        thread_it(download_file, (resource_url, save_path, chapters)) # 开始下载（多线程，防止窗口卡死）
 
-        # 保存修改后的文件
-        with open(pdf_path, "wb") as f:
-            writer.write(f)
-            
-    except Exception as e:
-        # 无控制台运行时（pyw/exe）sys.stderr 可能为 None，需保护。
-        if sys.stderr is not None:
-            sys.stderr.write(f"添加书签失败: {e}\n")
-            traceback.print_exc()
+    if failed_links:
+        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
+        download_btn.config(state="normal") # 设置下载按钮为启用状态
 
-def ui_call(func, *args, **kwargs) -> None:
-    """在主线程执行 Tk UI 更新"""
-    root.after(0, lambda: func(*args, **kwargs))
+    if not urls and not failed_links:
+        download_btn.config(state="normal") # 设置下载按钮为启用状态
 
 def download_file(url: str, save_path: str, chapters: list | None = None) -> None: # 下载文件
-    global download_states
     current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None }
     download_states.append(current_state)
 
@@ -284,6 +293,7 @@ def download_file(url: str, save_path: str, chapters: list | None = None) -> Non
                         download_progress = (all_downloaded_size / all_total_size) * 100
                         ui_call(download_progress_bar.config, value=download_progress) # 更新进度条
                         ui_call(progress_label.config, text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
+
             if chapters:
                 ui_call(progress_label.config, text="添加书签")
                 add_bookmarks(save_path, chapters)
@@ -303,7 +313,7 @@ def download_file(url: str, save_path: str, chapters: list | None = None) -> Non
         failed_states = [state for state in download_states if state["failed_reason"]]
         if len(failed_states) > 0: # 存在下载失败的文件
             failed_message = "\n\n".join(
-                f"{state.get('download_url')}\n{state.get('failed_reason')}"
+                f"{state.get("download_url")}\n{state.get("failed_reason")}"
                 for state in failed_states
             )
             ui_call(
@@ -321,67 +331,58 @@ def format_bytes(size: float) -> str: # 将数据单位进行格式化，返回�
         size /= 1024.0
     return f"{size:3.1f} PB"
 
-def parse_and_copy() -> None: # 解析并复制链接
-    urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()] # 获取所有非空行
-    resource_links = []
-    failed_links = []
-
-    for url in urls:
-        resource_url = parse(url)[0]
-        if not resource_url:
-            failed_links.append(url) # 添加到失败链接
-            continue
-        resource_links.append(resource_url)
-
-    if failed_links:
-        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links))
-
-    if resource_links:
-        pyperclip.copy("\n".join(resource_links)) # 将链接复制到剪贴板
-        messagebox.showinfo("提示", "资源链接已复制到剪贴板")
-
-def download() -> None: # 下载资源文件
-    global download_states
-    download_btn.config(state="disabled") # 设置下载按钮为禁用状态
-    download_states = [] # 初始化下载状态
-    urls = [line.strip() for line in url_text.get("1.0", tk.END).splitlines() if line.strip()] # 获取所有非空行
-    failed_links = []
-
-    if len(urls) > 1:
-        messagebox.showinfo("提示", "您选择了多个链接，将在选定的文件夹中使用教材名称作为文件名进行下载。")
-        dir_path = filedialog.askdirectory() # 选择文件夹
-        if not dir_path: # 用户取消/关闭对话框
-            download_btn.config(state="normal") # 恢复下载按钮为启用状态
+def add_bookmarks(pdf_path: str, chapters: list) -> None: # 给 PDF 添加书签
+    try:
+        if not chapters:
             return
-        dir_path = os.path.normpath(dir_path)
-    else:
-        dir_path = None
+        reader = PdfReader(pdf_path)
+        writer = PdfWriter()
+        writer.append_pages_from_reader(reader)
 
-    for url in urls:
-        resource_url, content_id, title ,chapters = parse(url)
-        if not resource_url:
-            failed_links.append(url) # 添加到失败链接
-            continue
+        # 递归添加书签的内部函数
+        def _add_chapter(chapter_list, parent=None):
+            for chapter in chapter_list:
+                title = chapter.get("title", "未知章节")
+                # 1. 获取原始值
+                p_index = chapter.get("page_index")
+                # print(f"处理章节“{title}”，页码索引：{p_index}")
+                # 2. 如果值为 None (JSON里的null) 或者不存在，跳过这个书签（因为未使用）
+                if p_index is None:
+                    # 无控制台运行时（pyw/exe）sys.stderr 可能为 None，需保护。
+                    if sys.stderr:
+                        sys.stderr.write(f"[!!]跳过章节“{title}”的书签，原因：未指定页码\n")
+                    continue
+                # 3. 尝试将其转为整数并减 1 (pypdf 页码从 0 开始)
+                try:
+                    page_num = int(p_index) - 1
+                except (ValueError, TypeError):
+                    page_num = 0 # 如果转换失败，默认指向第1页
+                # page_num = chapter.get("page_index", 1) - 1
+                if page_num < 0: page_num = 0
 
-        if dir_path:
-            default_filename = title or "download"
-            save_path = os.path.join(dir_path, f"{default_filename}.pdf") # 构造完整路径
-        else:
-            default_filename = title or "download"
-            save_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF 文件", "*.pdf"), ("所有文件", "*.*")], initialfile = default_filename) # 选择保存路径
-            if not save_path: # 用户取消了文件保存操作
-                download_btn.config(state="normal") # 恢复下载按钮为启用状态
-                return
-            save_path = os.path.normpath(save_path)
+                if page_num >= len(writer.pages):
+                    page_num = len(writer.pages) - 1
 
-        thread_it(download_file, (resource_url, save_path, chapters)) # 开始下载（多线程，防止窗口卡死）
+                # 添加书签
+                # parent 是父级书签对象，用于处理多级目录
+                bookmark = writer.add_outline_item(title, page_num, parent=parent)
 
-    if failed_links:
-        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_links)) # 显示警告对话框
-        download_btn.config(state="normal") # 设置下载按钮为启用状态
+                # 如果有子章节（children），递归添加
+                if "children" in chapter and chapter["children"]:
+                    _add_chapter(chapter["children"], parent=bookmark)
 
-    if not urls and not failed_links:
-        download_btn.config(state="normal") # 设置下载按钮为启用状态
+        # 开始处理章节数据
+        _add_chapter(chapters)
+
+        # 保存修改后的文件
+        with open(pdf_path, "wb") as f:
+            writer.write(f)
+
+    except Exception as e:
+        # 无控制台运行时（pyw/exe）sys.stderr 可能为 None，需保护。
+        if sys.stderr:
+            sys.stderr.write(f"添加书签失败: {e}\n")
+            traceback.print_exc()
 
 def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_window = tk.Toplevel(root)
@@ -511,108 +512,11 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_window.geometry(f"{w}x{h}+{x}+{y}")
     token_window.lift() # 置顶可见
 
-class resource_helper: # 获取网站上资源的数据
-    def parse_hierarchy(self, hierarchy) -> dict: # 解析层级数据
-        if not hierarchy: # 如果没有层级数据，返回空字典
-            return {}
-
-        parsed = {}
-        for h in hierarchy:
-            for ch in h["children"]:
-                parsed[ch["tag_id"]] = { "display_name": ch["tag_name"], "children": self.parse_hierarchy(ch["hierarchies"]) }
-        return parsed
-
-    def fetch_book_list(self): # 获取课本列表
-        # 获取电子课本层级数据
-        tags_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/tch_material_tag.json")
-        tags_data = tags_resp.json()
-        parsed_hier = self.parse_hierarchy(tags_data["hierarchies"])
-
-        # 获取电子课本 URL 列表
-        list_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json")
-        list_data: list[str] = list_resp.json()["urls"].split(",")
-
-        # 获取电子课本列表
-        for url in list_data:
-            book_resp = session.get(url)
-            book_data: list[dict] = book_resp.json()
-            for book in book_data:
-                if len(book["tag_paths"]) > 0: # 某些非课本资料的 tag_paths 属性为空数组
-                    # 解析课本层级数据
-                    tag_paths: list[str] = book["tag_paths"][0].split("/")[2:] # 电子课本 tag_paths 的前两项为“教材”、“电子教材”
-
-                    # 如果课本层级数据不在层级数据中，跳过
-                    temp_hier = parsed_hier[book["tag_paths"][0].split("/")[1]]
-                    if not tag_paths[0] in temp_hier["children"]:
-                        continue
-
-                    # 分别解析课本层级
-                    for p in tag_paths:
-                        if temp_hier["children"] and temp_hier["children"].get(p):
-                            temp_hier = temp_hier["children"].get(p)
-                    if not temp_hier["children"]:
-                        temp_hier["children"] = {}
-
-                    book["display_name"] = book["title"] if "title" in book else book["name"] if "name" in book else f"(未知电子课本 {book["id"]})"
-
-                    temp_hier["children"][book["id"]] = book
-
-        return parsed_hier
-
-    def fetch_lesson_list(self): # 获取课件列表
-        # 获取课件层级数据
-        tags_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/national_lesson_tag.json")
-        tags_data = tags_resp.json()
-        parsed_hier = self.parse_hierarchy([{ "children": [{ "tag_id": "__internal_national_lesson", "hierarchies": tags_data["hierarchies"], "tag_name": "课件资源" }] }])
-
-        # 获取课件 URL 列表
-        list_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/national_lesson/teachingmaterials/version/data_version.json")
-        list_data: list[str] = list_resp.json()["urls"]
-
-        # 获取课件列表
-        for url in list_data:
-            lesson_resp = session.get(url)
-            lesson_data: list[dict] = lesson_resp.json()
-            for lesson in lesson_data:
-                if len(lesson["tag_list"]) > 0:
-                    # 解析课件层级数据
-                    tag_paths: list[str] = [tag["tag_id"] for tag in sorted(lesson["tag_list"], key=lambda tag: tag["order_num"])]
-
-                    # 分别解析课件层级
-                    temp_hier = parsed_hier["__internal_national_lesson"]
-                    for p in tag_paths:
-                        if temp_hier["children"] and temp_hier["children"].get(p):
-                            temp_hier = temp_hier["children"].get(p)
-                    if not temp_hier["children"]:
-                        temp_hier["children"] = {}
-
-                    lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson["id"]})"
-
-                    temp_hier["children"][lesson["id"]] = lesson
-
-        return parsed_hier
-
-    def fetch_resource_list(self): # 获取资源列表
-        book_hier = self.fetch_book_list()
-        # lesson_hier = self.fetch_lesson_list() # 目前此函数代码存在问题
-        return { **book_hier }
-
-def thread_it(func, args: tuple = ()) -> None: # 打包函数到线程
-    t = threading.Thread(target=func, args=args)
-    # t.daemon = True
-    t.start()
-
-session = requests.Session() # 初始化请求
-download_states = [] # 初始化下载状态
-access_token = None
-headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
-session.proxies = {} # 全局忽略代理
-
 def load_access_token() -> None: # 读取本地存储的 Access Token
     global access_token
     try:
         if os_name == "Windows": # 在 Windows 上，从注册表读取
-            if winreg is None:
+            if not winreg:
                 return
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser", 0, winreg.KEY_READ) as key:
                 token, _ = winreg.QueryValueEx(key, "AccessToken")
@@ -661,7 +565,7 @@ def set_access_token(token: str) -> str: # 设置并更新 Access Token
 
     try:
         if os_name == "Windows": # 在 Windows 上，将 Access Token 写入注册表
-            if winreg is None:
+            if not winreg:
                 return "Access Token 已保存！"
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser") as key:
                 winreg.SetValueEx(key, "AccessToken", 0, winreg.REG_SZ, token)
@@ -704,6 +608,121 @@ def set_access_token(token: str) -> str: # 设置并更新 Access Token
     except Exception:
         return "Access Token 已保存！"
 
+class resource_helper: # 获取网站上资源的数据
+    def parse_hierarchy(self, hierarchy) -> dict: # 解析层级数据
+        if not hierarchy: # 如果没有层级数据，返回空字典
+            return {}
+
+        parsed = {}
+        for h in hierarchy:
+            for ch in h["children"]:
+                parsed[ch["tag_id"]] = { "display_name": ch["tag_name"], "children": self.parse_hierarchy(ch["hierarchies"]) }
+        return parsed
+
+    def fetch_book_list(self): # 获取课本列表
+        # 获取电子课本层级数据
+        tags_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/tch_material_tag.json")
+        tags_data = tags_resp.json()
+        parsed_hier = self.parse_hierarchy(tags_data["hierarchies"])
+
+        # 获取电子课本 URL 列表
+        list_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json")
+        list_data: list[str] = list_resp.json()["urls"].split(",")
+
+        # 获取电子课本列表
+        for url in list_data:
+            book_resp = session.get(url)
+            book_data: list[dict] = book_resp.json()
+            for book in book_data:
+                if len(book["tag_paths"]) > 0: # 某些非课本资料的 tag_paths 属性为空数组
+                    # 解析课本层级数据
+                    tag_paths: list[str] = book["tag_paths"][0].split("/")[2:] # 电子课本 tag_paths 的前两项为“教材”、“电子教材”
+
+                    # 如果课本层级数据不在层级数据中，跳过
+                    temp_hier = parsed_hier[book["tag_paths"][0].split("/")[1]]
+                    if not tag_paths[0] in temp_hier["children"]:
+                        continue
+
+                    # 分别解析课本层级
+                    for p in tag_paths:
+                        if temp_hier["children"] and temp_hier["children"].get(p):
+                            temp_hier = temp_hier["children"].get(p)
+                    if not temp_hier["children"]:
+                        temp_hier["children"] = {}
+
+                    book["display_name"] = book["title"] if "title" in book else book["name"] if "name" in book else f"(未知电子课本 {book["id"]})"
+
+                    temp_hier["children"][book["id"]] = book
+
+        return parsed_hier
+
+    def fetch_lesson_list(self): # 获取课件列表（目前此函数代码存在问题）
+        # 获取课件层级数据
+        tags_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/national_lesson_tag.json")
+        tags_data = tags_resp.json()
+        parsed_hier = self.parse_hierarchy([{ "children": [{ "tag_id": "__internal_national_lesson", "hierarchies": tags_data["hierarchies"], "tag_name": "课件资源" }] }])
+
+        # 获取课件 URL 列表
+        list_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/national_lesson/teachingmaterials/version/data_version.json")
+        list_data: list[str] = list_resp.json()["urls"]
+
+        # 获取课件列表
+        for url in list_data:
+            lesson_resp = session.get(url)
+            lesson_data: list[dict] = lesson_resp.json()
+            for lesson in lesson_data:
+                if len(lesson["tag_list"]) > 0:
+                    # 解析课件层级数据
+                    tag_paths: list[str] = [tag["tag_id"] for tag in sorted(lesson["tag_list"], key=lambda tag: tag["order_num"])]
+
+                    # 分别解析课件层级
+                    temp_hier = parsed_hier["__internal_national_lesson"]
+                    for p in tag_paths:
+                        if temp_hier["children"] and temp_hier["children"].get(p):
+                            temp_hier = temp_hier["children"].get(p)
+                    if not temp_hier["children"]:
+                        temp_hier["children"] = {}
+
+                    lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson["id"]})"
+
+                    temp_hier["children"][lesson["id"]] = lesson
+
+        return parsed_hier
+
+    def fetch_resource_list(self): # 获取资源列表
+        book_hier = self.fetch_book_list()
+        # lesson_hier = self.fetch_lesson_list()
+        return { **book_hier }
+
+def thread_it(func, args: tuple = ()) -> None: # 打包函数到线程
+    t = threading.Thread(target=func, args=args)
+    # t.daemon = True
+    t.start()
+
+def ui_call(func, *args, **kwargs) -> None: # 在主线程执行 Tkinter UI 更新
+    root.after(0, lambda: func(*args, **kwargs))
+
+def pick_ui_font_family() -> str: # 选择一个合适的字体
+    try:
+        available = set(tkfont.families(root)) # 获取所有字体的列表
+    except Exception:
+        return "TkDefaultFont"
+
+    for name in ("Microsoft YaHei UI", "微软雅黑", "PingFang SC", "Noto Sans CJK SC", "WenQuanYi Zen Hei", "Arial Unicode MS"): # 在这些字体中选择一个可用的字体
+        if name in available:
+            return name
+
+    try: # 若上述字体都不可用，则返回默认字体
+        return tkfont.nametofont("TkDefaultFont").actual("family")
+    except Exception:
+        return "TkDefaultFont"
+
+session = requests.Session() # 初始化请求
+download_states = [] # 初始化下载状态
+access_token = None
+headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
+session.proxies = {} # 全局忽略代理
+
 # 尝试加载已保存的 Access Token
 load_access_token()
 
@@ -717,25 +736,10 @@ except Exception:
 # GUI
 root = tk.Tk()
 
-def pick_ui_font_family() -> str:
-    try:
-        available = set(tkfont.families(root))
-    except Exception:
-        return "TkDefaultFont"
-
-    for name in ("微软雅黑", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "WenQuanYi Zen Hei", "Arial Unicode MS"):
-        if name in available:
-            return name
-
-    try:
-        return tkfont.nametofont("TkDefaultFont").actual("family")
-    except Exception:
-        return "TkDefaultFont"
-
 ui_font_family = pick_ui_font_family()
 
 # 高 DPI 适配
-if os_name == "Windows" and win32print is not None and win32gui is not None and win32con is not None and win32api is not None and ctypes is not None:
+if os_name == "Windows" and win32print and win32gui and win32con and win32api:
     scale: float = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
 
     # 调用 API 设置成由应用程序缩放
@@ -803,7 +807,7 @@ description = """\
 description_label = ttk.Label(container_frame, text=description, justify="left", font=(ui_font_family, 9)) # 添加描述标签
 description_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
 
-url_text = tk.Text(container_frame, width=70, height=12, font=(ui_font_family, 9)) # 添加 URL 输入框，长度和宽度不使用缩放！！！
+url_text = tk.Text(container_frame, width=70, height=12, font=(ui_font_family, 9)) # 添加 URL 输入框，长度和宽度不使用缩放
 url_text.pack(padx=int(15 * scale), pady=int(15 * scale)) # 设置水平外边距、垂直外边距（跟随缩放）
 
 # 创建右键菜单
@@ -896,6 +900,11 @@ for i in range(8):
 # 按钮：设置 Token
 token_btn = ttk.Button(container_frame, text="设置 Token", command=show_access_token_window)
 token_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+
+# 复选框：添加书签
+bookmark_var = tk.BooleanVar(value=True)
+bookmark_checkbox = ttk.Checkbutton(container_frame, text="添加书签", variable=bookmark_var)
+bookmark_checkbox.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
 # 按钮：下载
 download_btn = ttk.Button(container_frame, text="下载", command=download)
