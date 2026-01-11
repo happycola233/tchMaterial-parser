@@ -109,12 +109,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-      
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12' # 推荐使用 3.12 稳定版
-      
+          python-version: '3.14'
       - name: Install dependencies
         run: |
           python -m venv .venv
@@ -122,42 +120,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
-      
       - name: Build app with PyInstaller
         run: |
-          # 激活虚拟环境
-          source .venv/bin/activate
-          
-          # 执行打包命令
-          # --clean: 清理缓存
-          # --onefile: 强制生成单文件
-          # --name: 指定输出文件名
-          # --add-data: 打包资源文件 (格式为 源路径:目标路径)
-          # src/tchMaterial-parser.pyw: 你的入口脚本
-          
-          pyinstaller --clean --onefile --name tchMaterial-parser \
-            --add-data "res:res" \
-            --add-data "version.txt:." \
-            src/tchMaterial-parser.pyw
-
-      - name: Sign the binary
-        run: |
-          # 对生成的单文件进行 Ad-hoc 签名
-          # 这一步是解决“文件已损坏”的核心
-          codesign --force --deep --sign - dist/tchMaterial-parser
-
+          .venv/bin/pyinstaller ./tchMaterial-parser.spec
       - name: Create zip archive
         run: |
           cd dist
-          # 改名为带架构后缀的文件名
-          mv tchMaterial-parser tchMaterial-parser-mac-arm64
-          
-          # 赋予可执行权限（双重保险）
-          chmod +x tchMaterial-parser-mac-arm64
-          
-          # 压缩为 zip
-          zip -r tchMaterial-parser-mac-arm64.zip tchMaterial-parser-mac-arm64
-
+          mv tchMaterial-parser tchMaterial-parser-mac-arm64.app
+          zip -r tchMaterial-parser-mac-arm64.zip tchMaterial-parser-mac-arm64.app
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
@@ -165,4 +135,3 @@ jobs:
           tag_name: ${{ inputs.tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
