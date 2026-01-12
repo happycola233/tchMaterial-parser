@@ -161,8 +161,8 @@ def parse(url: str, bookmarks: bool) -> tuple[str, str, list] | tuple[None, None
                             mappings.sort(key=lambda x: x["page_number"])
                             for i, m in enumerate(mappings):
                                 temp_chapters.append({
-                                    "title": f"第 {i+1} 节 (P{m["page_number"]})",
-                                    "page_index": m["page_number"]
+                                    "title": f"第 {i+1} 节 (P{m['page_number']})",
+                                    "page_index": m['page_number']
                                 })
                             chapters = temp_chapters
 
@@ -650,9 +650,9 @@ class resource_helper: # 获取网站上资源的数据
                     if not temp_hier["children"]:
                         temp_hier["children"] = {}
 
-                    book["display_name"] = book["title"] if "title" in book else book["name"] if "name" in book else f"(未知电子课本 {book["id"]})"
+                    book["display_name"] = book["title"] if "title" in book else book["name"] if "name" in book else f"(未知电子课本 {book['id']})"
 
-                    temp_hier["children"][book["id"]] = book
+                    temp_hier["children"][book['id']] = book
 
         return parsed_hier
 
@@ -683,9 +683,9 @@ class resource_helper: # 获取网站上资源的数据
                     if not temp_hier["children"]:
                         temp_hier["children"] = {}
 
-                    lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson["id"]})"
+                    lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson['id']})"
 
-                    temp_hier["children"][lesson["id"]] = lesson
+                    temp_hier["children"][lesson['id']] = lesson
 
         return parsed_hier
 
@@ -739,7 +739,7 @@ root = tk.Tk()
 ui_font_family = pick_ui_font_family()
 
 # 高 DPI 适配
-if os_name == "Windows" and win32print and win32gui and win32con and win32api:
+if os_name == "Windows" and win32print and win32gui and win32con and win32api and ctypes:
     scale: float = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
 
     # 调用 API 设置成由应用程序缩放
