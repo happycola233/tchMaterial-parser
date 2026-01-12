@@ -6,7 +6,7 @@
 
 本工具可以帮助您从[**国家中小学智慧教育平台**](https://basic.smartedu.cn/)获取电子课本的 PDF 文件网址并进行下载，让您更方便地获取课本内容。
 
-## ✨工具特点
+## ✨ 工具特点
 
 - 📚**支持批量下载**：一次输入多个电子课本预览页面网址，即可批量下载 PDF 课本文件。
 - 📂**自动命名文件**：工具会自动使用电子课本的名称作为文件名，方便管理下载的课本文件。
@@ -18,13 +18,16 @@
 
 ![工具截图](./res/main.png)
 
-## 📥工具下载与安装方法
+## 📥 工具下载与安装方法
 
 ### GitHub Releases
 
 本项目的 [GitHub Releases 页面](https://github.com/happycola233/tchMaterial-parser/releases)会发布**适用于 Windows、Linux 的 x86_64 架构**与**适用于 Linux、macOS 的 ARM64 架构**的程序。
 
-在下载完成之后，即可运行本程序，不需要额外的安装步骤。
+下载完成之后不需要额外的安装步骤。Windows 和 Linux 可直接运行本程序。
+
+> [!WARNING]
+> 由于没有签名，macOS 会报告文件已被损坏，需要先运行 `xattr -cr /path/to/tchMaterial-parser.app` 来移除应用的“隔离”属性。为了正确持久化 Access Token，建议将应用移动到 `/Applications` 目录下再运行。
 
 ### Arch 用户软件仓库（AUR）
 
@@ -36,9 +39,9 @@ yay -S tchmaterial-parser
 
 感谢 [@iamzhz](https://github.com/iamzhz) 为本工具制作了发行包（[#26](../../issues/26)）！
 
-## 🛠️使用方法
+## 🛠️ 使用方法
 
-### 1. ⌨️输入电子课本链接
+### 1. ⌨️ 输入电子课本链接
 
 将电子课本的**预览页面网址**粘贴到工具文本框中，支持多个 URL（每行一个）。
 
@@ -48,7 +51,7 @@ yay -S tchmaterial-parser
 https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=XXXXXX&catalogType=tchMaterial&subCatalog=tchMaterial
 ```
 
-### 2. 🔑设置 Access Token（可选）
+### 2. 🔑 设置 Access Token（可选）
 
 > [!TIP]
 > 自 v3.1 版本起，这一步操作已经**不再必要**，当未设置 Access Token 时工具会使用其他方法下载资源。然而，这一方法**并不长期有效**，因此仍然建议您进行这一步操作。
@@ -58,24 +61,30 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 3. 在控制台粘贴以下代码后回车（Enter）：
 
    ```js
-   (function() {
-     const authKey = Object.keys(localStorage).find(key => key.startsWith("ND_UC_AUTH"));
+   (function () {
+     const authKey = Object.keys(localStorage).find((key) =>
+       key.startsWith("ND_UC_AUTH"),
+     );
      if (!authKey) {
        console.error("未找到 Access Token，请确保已登录！");
        return;
      }
      const tokenData = JSON.parse(localStorage.getItem(authKey));
      const accessToken = JSON.parse(tokenData.value).access_token;
-     console.log("%cAccess Token:", "color: green; font-weight: bold", accessToken);
+     console.log(
+       "%cAccess Token:",
+       "color: green; font-weight: bold",
+       accessToken,
+     );
    })();
    ```
-  
+
 4. 复制控制台输出的 **Access Token**，然后在本工具中点击 “**设置 Token**” 按钮，粘贴并保存 Token。
 
 > [!NOTE]
 > Access Token 可能会过期，若下载失败，请重新获取并设置新的 Token。
 
-### 3. 🚀开始下载
+### 3. 🚀 开始下载
 
 点击 “**下载**” 按钮，工具将自动解析并下载 PDF 课本。
 
@@ -85,9 +94,9 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 ![添加了书签的 PDF 文件](./res/bookmark.png)
 
-## ❓常见问题
+## ❓ 常见问题
 
-### 1. ⚠️为什么下载失败？
+### 1. ⚠️ 为什么下载失败？
 
 - 如果您没有设置 Access Token，可能是本工具使用的方法失效了，请[**设置 Access Token**](#2-设置-access-token可选)🔑。
 - 如果您设置了 Access Token，由于其具有时效性（一般为 7 天），因此极有可能是 Access Token 过期了，请重新获取新的 Access Token。
@@ -110,14 +119,14 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 [![Star History Chart](https://api.star-history.com/svg?repos=happycola233/tchMaterial-parser&type=Date)](https://star-history.com/#happycola233/tchMaterial-parser&Date)
 
-## 🤝贡献指南
+## 🤝 贡献指南
 
 如果您发现 Bug 或有改进建议，欢迎提交 **Issue** 或 **Pull Request**，让我们一起完善本工具！
 
-## 📜许可证
+## 📜 许可证
 
 本项目基于 [MIT 许可证](LICENSE)，欢迎自由使用和二次开发。
 
-## 💌友情链接
+## 💌 友情链接
 
-- 📚您也可以在 [ChinaTextbook](https://github.com/TapXWorld/ChinaTextbook) 项目中下载归档的电子课本 PDF。
+- 📚 您也可以在 [ChinaTextbook](https://github.com/TapXWorld/ChinaTextbook) 项目中下载归档的电子课本 PDF。
