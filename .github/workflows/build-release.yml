@@ -18,11 +18,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: "3.14"
+
       - name: Install dependencies
         run: |
           python -m venv .venv
@@ -30,11 +32,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
+
       - name: Build app with PyInstaller
         run: |
-          .venv\Scripts\pyinstaller ./tchMaterial-parser.spec
+          .venv\Scripts\activate
+          pyinstaller ./tchMaterial-parser.spec
+
+      - name: Pack app
+        run: |
           cd dist
           mv tchMaterial-parser.exe tchMaterial-parser-windows-x64.exe
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
@@ -48,11 +56,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: "3.14"
+
       - name: Install dependencies
         run: |
           python -m venv .venv
@@ -60,11 +70,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
+
       - name: Build app with PyInstaller
         run: |
-          .venv/bin/pyinstaller ./tchMaterial-parser.spec
+          source .venv/bin/activate
+          pyinstaller ./tchMaterial-parser.spec
+
+      - name: Pack app
+        run: |
           cd dist
           mv tchMaterial-parser tchMaterial-parser-linux-x64
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
@@ -74,15 +90,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux-arm64:
-    name: Build Linux ARM64 App
+    name: Build Linux Arm64 App
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: "3.14"
+
       - name: Install dependencies
         run: |
           python -m venv .venv
@@ -90,11 +108,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
+
       - name: Build app with PyInstaller
         run: |
-          .venv/bin/pyinstaller ./tchMaterial-parser.spec
+          source .venv/bin/activate
+          pyinstaller ./tchMaterial-parser.spec
+
+      - name: Pack app
+        run: |
           cd dist
           mv tchMaterial-parser tchMaterial-parser-linux-arm64
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
@@ -103,16 +127,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-macos:
-    name: Build macOS ARM64 App
+  build-macos-arm64:
+    name: Build macOS Arm64 App
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: "3.14"
+
       - name: Install dependencies
         run: |
           python -m venv .venv
@@ -120,14 +146,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
+
       - name: Build app with PyInstaller
         run: |
-          .venv/bin/pyinstaller ./tchMaterial-parser.spec
-      - name: Create zip archive
+          source .venv/bin/activate
+          pyinstaller ./tchMaterial-parser.spec
+
+      - name: Pack app
         run: |
           cd dist
-          mv tchMaterial-parser tchMaterial-parser-mac-arm64.app
-          zip -r tchMaterial-parser-mac-arm64.zip tchMaterial-parser-mac-arm64.app
+          /usr/bin/ditto -c -k --keepParent -rsrc tchMaterial-parser.app tchMaterial-parser-mac-arm64.zip
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
