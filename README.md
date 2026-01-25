@@ -9,25 +9,24 @@
 ## ✨ 工具特点
 
 - 📚**支持批量下载**：一次输入多个电子课本预览页面网址，即可批量下载 PDF 课本文件。
-- 📂**自动命名文件**：工具会自动使用电子课本的名称作为文件名，方便管理下载的课本文件。
-- 📊**下载进度可视化**：实时显示下载进度，支持暂停/恢复操作。
+- 📂**自动命名文件**：工具会自动使用电子课本的名称作为默认文件名，方便管理下载的课本文件。
 - 🔖**自动添加书签**：若勾选了 “添加书签” 选项，则会在下载完成后为电子课本添加书签，在查看 PDF 时可更方便地跳转到指定位置。
-- 🔑**支持 Access Token**：支持用户[手动输入 Access Token](#2-设置-access-token可选) 并自动保存，下次启动可自动加载。
+- 🔑**支持 Access Token**：支持用户[手动输入 Access Token](#2--设置-access-token可选) 并自动保存，下次启动可自动加载。
 - 🖥️**高 DPI 适配**：优化 UI 以适配高分辨率屏幕，避免界面模糊问题。
 - 💻**跨平台支持**：支持 Windows、Linux、macOS 等操作系统（需要图形界面）。
 
 ![工具截图](./res/main.png)
 
-## 📥 工具下载与安装方法
+## 📥 下载与安装方法
 
 ### GitHub Releases
 
-本项目的 [GitHub Releases 页面](https://github.com/happycola233/tchMaterial-parser/releases)会发布**适用于 Windows、Linux 的 x86_64 架构**与**适用于 Linux、macOS 的 ARM64 架构**的程序。
+本项目的 [GitHub Releases 页面](https://github.com/happycola233/tchMaterial-parser/releases)会发布**适用于 Windows、Linux 的 x86_64 架构**与**适用于 Linux、macOS 的 Arm64 架构**的程序。
 
 下载完成之后不需要额外的安装步骤。Windows 和 Linux 可直接运行本程序。
 
 > [!WARNING]
-> 由于没有签名，macOS 会报告文件已被损坏，需要先运行 `xattr -cr /path/to/tchMaterial-parser.app` 来移除应用的“隔离”属性。为了正确持久化 Access Token，建议将应用移动到 `/Applications` 目录下再运行。
+> 在 macOS 操作系统中，由于没有签名，系统会报告文件已被损坏，因此需要先运行 `xattr -cr /path/to/tchMaterial-parser.app` 来移除应用的 “隔离” 属性。为了保证 Access Token 的持久化，建议将应用移动到 `/Applications` 目录下再运行。
 
 ### Arch 用户软件仓库（AUR）
 
@@ -98,16 +97,16 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 ### 1. ⚠️ 为什么下载失败？
 
-- 如果您没有设置 Access Token，可能是本工具使用的方法失效了，请[**设置 Access Token**](#2-设置-access-token可选)🔑。
-- 如果您设置了 Access Token，由于其具有时效性（一般为 7 天），因此极有可能是 Access Token 过期了，请重新获取新的 Access Token。
+- 如果您没有设置 Access Token，可能是本工具使用的方法失效了，请[**设置 Access Token**](#2--设置-access-token可选)🔑。
+- 如果您设置了 Access Token，由于其具有时效性（一般为 7 天），因此极有可能是 **Access Token 过期了**，请重新获取新的 Access Token。
 - **确认网络连接是否正常**🌐，有时网络不稳定可能导致下载失败。
 - **确保输入的网址有效**🔗，部分旧资源可能已被移除。
 
 ### 2. 💾Access Token 保存在哪里？
 
-- **Windows 操作系统**：Token 会存储在**注册表** `HKEY_CURRENT_USER\Software\tchMaterial-parser` 项中的 `AccessToken` 值。
-- **Linux 操作系统**: Token 会存储在**文件** `~/.config/tchMaterial-parser/data.json` 中。
-- **macOS 操作系统**：Token 会存储在**文件** `~/Library/Application Support/tchMaterial-parser/data.json` 中。
+- **Windows**：Token 会存储在**注册表** `HKEY_CURRENT_USER\Software\tchMaterial-parser` 项中的 `AccessToken` 值。
+- **Linux**: Token 会存储在**文件** `~/.config/tchMaterial-parser/data.json` 中。
+- **macOS**：Token 会存储在**文件** `~/Library/Application Support/tchMaterial-parser/data.json` 中。
 - **其他操作系统**：Token 仅在运行时临时存储于内存，不会自动保存，程序重启后需重新输入，目前我们正在努力改进该功能。
 
 ### 3. 🔐Token 会不会泄露？
