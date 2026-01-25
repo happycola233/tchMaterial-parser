@@ -201,11 +201,13 @@ def parse(url: str, bookmarks: bool) -> tuple[str, str, list] | tuple[None, None
                                 "title": f"第 {i+1} 节 (P{m['page_number']})",
                                 "page_index": m["page_number"]
                             })
+
             except Exception as e:
                 print_error(e)
                 chapters = []
 
         return resource_url, title, chapters
+
     except Exception as e:
         print_error(e)
         return None, None, None
@@ -283,9 +285,9 @@ def download_file(url: str, save_path: str, chapters: list | None = None) -> Non
             current_state["total_size"] = int(response.headers.get("Content-Length", 0))
 
             with open(save_path, "wb") as file:
-                for chunk in response.iter_content(
+                for chunk in response.iter_content( # 分块下载
                     chunk_size=131072 if current_state["total_size"] < 20971520 else 262144 if current_state["total_size"] < 52428800 else 524288
-                ): # 分块下载
+                ):
                     file.write(chunk)
                     current_state["downloaded_size"] += len(chunk)
                     all_downloaded_size = sum(state["downloaded_size"] for state in download_states)
@@ -299,9 +301,11 @@ def download_file(url: str, save_path: str, chapters: list | None = None) -> Non
                         ui_call(progress_label.config, text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
 
             current_state["downloaded_size"] = current_state["total_size"]
-            if chapters:
+
+            if chapters: # 添加书签
                 ui_call(progress_label.config, text="添加书签")
                 add_bookmarks(save_path, chapters)
+
             current_state["finished"] = True
 
     except Exception as e:
@@ -344,37 +348,32 @@ def add_bookmarks(pdf_path: str, chapters: list) -> None: # 给 PDF 添加书签
         writer = PdfWriter()
         writer.append_pages_from_reader(reader)
 
-        # 递归添加书签的内部函数
-        def _add_chapter(chapter_list, parent=None):
+        def add_chapter(chapter_list, parent=None): # 递归添加书签的内部函数
             for chapter in chapter_list:
                 title = chapter.get("title", "未知章节")
-                # 1. 获取原始值
                 p_index = chapter.get("page_index")
-                # 2. 如果值为 None (JSON里的null) 或者不存在，跳过这个书签（因为未使用）
-                if p_index is None:
+                if p_index is None: # 如果值为 None 或者不存在，跳过这个书签
                     print_error(ValueError(f"章节 “{title}” 的页码索引无效，已跳过此处书签添加"))
                     continue
-                # 3. 尝试将其转为整数并减 1 (pypdf 页码从 0 开始)
-                try:
+
+                try: # 尝试将其转为整数并减 1（pypdf 页码从 0 开始)
                     page_num = int(p_index) - 1
-                except (ValueError, TypeError):
-                    page_num = 0 # 如果转换失败，默认指向第1页
-                # page_num = chapter.get("page_index", 1) - 1
-                if page_num < 0: page_num = 0
+                except (ValueError, TypeError) as e: # 如果转换失败，跳过这个书签
+                    print_error(e)
+                    continue
 
-                if page_num >= len(writer.pages):
-                    page_num = len(writer.pages) - 1
+                if page_num < 0 or page_num >= len(writer.pages):
+                    continue
 
-                # 添加书签
-                # parent 是父级书签对象，用于处理多级目录
+                # 添加书签，其中 parent 是父级书签对象，用于处理多级目录
                 bookmark = writer.add_outline_item(title, page_num, parent=parent)
 
                 # 如果有子章节（children），递归添加
                 if chapter.get("children"):
-                    _add_chapter(chapter["children"], parent=bookmark)
+                    add_chapter(chapter["children"], parent=bookmark)
 
         # 开始处理章节数据
-        _add_chapter(chapters)
+        add_chapter(chapters)
 
         # 保存修改后的文件
         with open(pdf_path, "wb") as f:
@@ -604,6 +603,7 @@ def set_access_token(token: str) -> str: # 设置并更新 Access Token
             return "Access Token 已保存！\n已写入文件：~/Library/Application Support/tchMaterial-parser/data.json"
         else:
             return "Access Token 已保存！\n本工具尚未支持该操作系统下 Access Token 的持久化，下次启动时仍需手动输入 Access Token。"
+
     except Exception as e:
         print_error(e)
         return "Access Token 已保存！\n因出现错误而无法持久化，下次启动时仍需手动输入 Access Token。"
@@ -656,7 +656,7 @@ class resource_helper: # 获取网站上资源的数据
 
         return parsed_hier
 
-    def fetch_lesson_list(self): # 获取课件列表（目前此函数代码存在问题）
+    def fetch_lesson_list(self): # 获取课件列表
         # 获取课件层级数据
         tags_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/national_lesson_tag.json")
         tags_data = tags_resp.json()
@@ -675,17 +675,20 @@ class resource_helper: # 获取网站上资源的数据
                     # 解析课件层级数据
                     tag_paths: list[str] = [tag["tag_id"] for tag in sorted(lesson["tag_list"], key=lambda tag: tag["order_num"])]
 
-                    # 分别解析课件层级
-                    temp_hier = parsed_hier["__internal_national_lesson"]
-                    for p in tag_paths:
-                        if temp_hier["children"] and temp_hier["children"].get(p):
-                            temp_hier = temp_hier["children"].get(p)
-                    if not temp_hier["children"]:
-                        temp_hier["children"] = {}
+                    # 分别解析课件层级（tag_paths 为乱序）
+                    def parse_tag_path(hier):
+                        for p in tag_paths:
+                            if hier["children"] and hier["children"].get(p):
+                                return parse_tag_path(hier["children"].get(p))
+                        return hier
+
+                    hier = parse_tag_path(parsed_hier["__internal_national_lesson"])
+                    if not hier["children"]:
+                        hier["children"] = {}
 
                     lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson['id']})"
 
-                    temp_hier["children"][lesson["id"]] = lesson
+                    hier["children"][lesson["id"]] = lesson
 
         return parsed_hier
 
@@ -723,6 +726,18 @@ access_token = None
 headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
 session.proxies = {} # 全局忽略代理
 
+scale: float | None = None
+
+# 在 Windows 上进行高 DPI 适配
+if os_name == "Windows" and win32print and win32gui and win32con and win32api and ctypes:
+    scale = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
+
+    # 调用 API 设置成由应用程序缩放
+    try: # Windows 8.1 或更新
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception: # Windows 8 或更老
+        ctypes.windll.user32.SetProcessDPIAware()
+
 # 尝试加载已保存的 Access Token
 load_access_token()
 
@@ -739,16 +754,7 @@ root = tk.Tk()
 
 ui_font_family = pick_ui_font_family()
 
-# 在 Windows 上进行高 DPI 适配
-if os_name == "Windows" and win32print and win32gui and win32con and win32api and ctypes:
-    scale: float = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
-
-    # 调用 API 设置成由应用程序缩放
-    try: # Windows 8.1 或更新
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    except Exception: # Windows 8 或更老
-        ctypes.windll.user32.SetProcessDPIAware()
-else: # 在非 Windows 操作系统上，通过 Tkinter 估算缩放因子
+if not scale: # 若获取缩放因子失败，通过 Tkinter 估算缩放因子
     try:
         scale: float = round(root.winfo_fpixels("1i") / 96.0, 2)
     except Exception:
