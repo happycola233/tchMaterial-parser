@@ -699,11 +699,18 @@ class resource_helper: # 获取网站上资源的数据
 
 def thread_it(func, args: tuple = ()) -> None: # 打包函数到线程
     t = threading.Thread(target=func, args=args)
-    # t.daemon = True
+    t.daemon = True
     t.start()
 
 def ui_call(func, *args, **kwargs) -> None: # 在主线程执行 Tkinter UI 更新
-    root.after(0, lambda: func(*args, **kwargs))
+    if app_closing:
+        return
+
+    try:
+        root.after(0, lambda: (not app_closing) and func(*args, **kwargs))
+    except Exception:
+        # 主窗口销毁后，root.after 会抛错，直接忽略即可
+        pass
 
 def pick_ui_font_family() -> str: # 选择一个合适的字体
     try:
@@ -722,6 +729,7 @@ def pick_ui_font_family() -> str: # 选择一个合适的字体
 
 session = requests.Session() # 初始化请求
 download_states = [] # 初始化下载状态
+app_closing = False
 access_token = None
 headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
 session.proxies = {} # 全局忽略代理
@@ -778,9 +786,16 @@ def set_icon() -> None: # 设置窗口图标
 set_icon() # 设置窗口图标
 
 def on_closing() -> None: # 处理窗口关闭事件
+    global app_closing
+
+    if app_closing:
+        return
+
     if not all(state["finished"] for state in download_states): # 当正在下载时，询问用户
         if not messagebox.askokcancel("提示", "下载任务未完成，是否退出？"):
             return
+
+    app_closing = True
 
     current_process = psutil.Process(os.getpid()) # 获取自身的进程 ID
     child_processes = current_process.children(recursive=True) # 获取自身的所有子进程
@@ -791,8 +806,10 @@ def on_closing() -> None: # 处理窗口关闭事件
         except Exception: # 进程可能已经结束
             pass
 
-    # 结束自身进程
-    sys.exit(0)
+    try:
+        root.destroy()
+    except Exception:
+        pass
 
 root.protocol("WM_DELETE_WINDOW", on_closing) # 注册窗口关闭事件的处理函数
 
