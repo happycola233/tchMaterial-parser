@@ -55,6 +55,15 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 > [!TIP]
 > 自 v3.1 版本起，这一步操作已经**不再必要**，当未设置 Access Token 时工具会使用其他方法下载资源。然而，这一方法**并不长期有效**，因此仍然建议您进行这一步操作。
 
+> [!WARNING]
+> 友情提示：
+>
+> 1. **先登录账号，再粘贴代码！**
+> 2. 粘贴代码时，不要粘贴到 “过滤” 或 “筛选器” 上，而是 “>” 后面！
+> 3. 粘贴时如遇到警告，请先输入 “**允许粘贴**” 四个字，然后再次粘贴代码！
+>
+> ![提示](./res/get_token.png)
+
 1. **打开浏览器**，访问[国家中小学智慧教育平台](https://auth.smartedu.cn/uias/login)并**登录账号**。
 2. 按下 **F12** 或 **Ctrl+Shift+I**，或右键——检查（审查元素）打开**开发者工具**，选择**控制台（Console）**。
 3. 在控制台粘贴以下代码后回车（Enter）：
