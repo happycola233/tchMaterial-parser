@@ -13,12 +13,12 @@ on:
         type: string
 
 jobs:
-  build-windows:
+  build-windows-x64:
     name: Build Windows x64 App
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -51,12 +51,50 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-linux:
+  build-windows-arm64:
+    name: Build Windows Arm64 App
+    runs-on: windows-11-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          .venv\Scripts\activate
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build app with PyInstaller
+        run: |
+          .venv\Scripts\activate
+          pyinstaller ./tchMaterial-parser.spec
+
+      - name: Pack app
+        run: |
+          cd dist
+          mv tchMaterial-parser.exe tchMaterial-parser-windows-arm64.exe
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/tchMaterial-parser-windows-arm64.exe
+          tag_name: ${{ inputs.tag || github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux-x64:
     name: Build Linux x64 App
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -94,7 +132,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -127,12 +165,50 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-macos-arm64:
-    name: Build macOS Arm64 App
-    runs-on: macos-latest
+  build-macos-x64:
+    name: Build macOS x64 App
+    runs-on: macos-26-intel
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build app with PyInstaller
+        run: |
+          source .venv/bin/activate
+          pyinstaller ./tchMaterial-parser.spec
+
+      - name: Pack app
+        run: |
+          cd dist
+          /usr/bin/ditto -c -k --keepParent -rsrc tchMaterial-parser.app tchMaterial-parser-mac-x64.zip
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/tchMaterial-parser-mac-x64.zip
+          tag_name: ${{ inputs.tag || github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos-arm64:
+    name: Build macOS Arm64 App
+    runs-on: macos-26
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
