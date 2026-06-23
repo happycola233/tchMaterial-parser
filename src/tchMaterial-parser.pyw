@@ -851,39 +851,45 @@ description = """\
 📝 您也可以直接在左侧的列表中选择教材。
 📥 点击 “下载” 按钮后，程序会解析并下载资源。
 ❗ 注：为了更可靠地下载，建议点击 “设置 Token” 按钮，参照里面的说明完成设置。"""
-description_label = ttk.Label(container_frame, text=description, justify="left", font=(ui_font_family, 9)) # 添加描述标签
+description_label = ttk.Label(container_frame, text=description, font=(ui_font_family, 9)) # 添加描述标签
 description_label.pack(pady=int(5 * scale), anchor="w") # 设置垂直外边距（跟随缩放）
 
 paned = ttk.PanedWindow(container_frame, orient="horizontal") # 创建水平分割窗口
 paned.pack(fill="both", expand=True)
 treeview_pane = ttk.Frame(paned) # 创建树视图的子框架，放在分割窗口的左侧
 treeview_pane.columnconfigure(0, weight=1)
-treeview_pane.rowconfigure(0, weight=1)
+treeview_pane.rowconfigure(1, weight=1)
 text_pane = ttk.Frame(paned) # 创建文本框的子框架，放在分割窗口的右侧
 text_pane.columnconfigure(0, weight=1)
-text_pane.rowconfigure(0, weight=1)
+text_pane.rowconfigure(1, weight=1)
 paned.add(treeview_pane)
 paned.add(text_pane)
+paned.update_idletasks()
+root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%
 
+treeview_label = ttk.Label(treeview_pane, text="教材列表", font=(ui_font_family, 10, "bold")) # 添加树视图标签
+treeview_label.grid(row=0, column=0, sticky="w")
 style = ttk.Style(root)
 style.configure("Custom.Treeview", rowheight=int(30 * scale), font=(ui_font_family, 9))
 treeview = ttk.Treeview(treeview_pane, style="Custom.Treeview", show="tree", selectmode="browse") # 创建树视图，使用自定义样式，隐藏列标题，设置选择模式为单选
-treeview.grid(row=0, column=0, sticky="nsew")
+treeview.grid(row=1, column=0, sticky="nsew")
 treeview_scrollbar = ttk.Scrollbar(treeview_pane, orient="vertical", command=treeview.yview)
 treeview.configure(yscrollcommand=lambda f, l: auto_hide_scrollbar(treeview_scrollbar, f, l))
-treeview_scrollbar.grid(row=0, column=1, sticky="ns")
+treeview_scrollbar.grid(row=1, column=1, sticky="ns")
 # BUG: 水平滚动条不起作用
 # hsb = ttk.Scrollbar(treeview_pane, orient="horizontal", command=treeview.xview)
 # treeview.configure(xscrollcommand=lambda f, l: auto_hide_scrollbar(hsb, f, l))
-# hsb.grid(row=1, column=0, sticky="ew")
+# hsb.grid(row=2, column=0, sticky="ew")
 
+url_label = ttk.Label(text_pane, text="资源页面网址", font=(ui_font_family, 10, "bold")) # 添加 URL 标签
+url_label.grid(row=0, column=0, sticky="w")
 url_text = tk.Text(text_pane, wrap="word", font=(ui_font_family, 9)) # 添加 URL 输入框
-url_text.grid(row=0, column=0, sticky="nsew")
+url_text.grid(row=1, column=0, sticky="nsew")
 bind_context_menu(url_text) # 为 URL 输入框创建右键菜单
 bind_tab_navigation(url_text) # 绑定 Tab 键导航
 text_scrollbar = ttk.Scrollbar(text_pane, orient="vertical", command=url_text.yview)
 url_text.configure(relief="solid", undo=True, yscrollcommand=lambda f, l: auto_hide_scrollbar(text_scrollbar, f, l))
-text_scrollbar.grid(row=0, column=1, sticky="ns")
+text_scrollbar.grid(row=1, column=1, sticky="ns")
 url_text.focus()
 
 tree_item_data: dict[str, dict] = {} # 构建树视图数据的字典，键为树项 ID，值为资源数据
@@ -916,10 +922,9 @@ def on_tree_select(event: tk.Event) -> None: # 处理树视图选择事件
 
     item = selection[0]
     children = treeview.get_children(item)
-    if children: # 如果选中的项有子项，则切换展开/收起状态，否则插入 URL
-        treeview.item(item, open=not treeview.item(item, "open"))
+    if children: # 如果选中的项有子项，则加载子项的预览图，否则插入 URL
         for child in children: # 遍历子项，设置子项的图片
-            if tree_item_data[child].get("custom_properties", {}).get("thumbnails"):
+            if not treeview.item(child)["image"] and tree_item_data[child].get("custom_properties", {}).get("thumbnails"):
                 thread_it(load_icon, (child, tree_item_data[child]["custom_properties"]["thumbnails"][0]))
     else:
         resource_data = tree_item_data.get(item)
