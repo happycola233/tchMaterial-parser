@@ -168,7 +168,7 @@ def parse(url: str, bookmarks: bool) -> tuple[str, str, list] | tuple[None, None
                         tree_data = tree_resp.json()
 
                         # 递归函数：合并 tree 的标题和 mapping 的页码
-                        def process_tree_nodes(nodes):
+                        def process_tree_nodes(nodes: list) -> list:
                             result = []
                             for node in nodes:
                                 # 从 page_map 中找页码，找不到为 None
@@ -280,9 +280,10 @@ def download_file(url: str, save_path: str, chapters: list | None = None) -> Non
             current_state["finished"] = True
             current_state["failed_reason"] = f"服务器返回 HTTP 状态码 {response.status_code}" + "，Access Token 可能已过期或无效，请重新设置" if response.status_code == 401 or response.status_code == 403 else ""
         else:
+            temp_path = f"{save_path}.tmp"
             current_state["total_size"] = int(response.headers.get("Content-Length", 0))
 
-            with open(save_path, "wb") as file:
+            with open(temp_path, "wb") as file:
                 for chunk in response.iter_content( # 分块下载
                     chunk_size=131072 if current_state["total_size"] < 20971520 else 262144 if current_state["total_size"] < 52428800 else 524288
                 ):
@@ -302,8 +303,9 @@ def download_file(url: str, save_path: str, chapters: list | None = None) -> Non
 
             if chapters: # 添加书签
                 ui_call(progress_label.config, text="添加书签")
-                add_bookmarks(save_path, chapters)
+                add_bookmarks(temp_path, chapters)
 
+            os.replace(temp_path, save_path) # 重命名临时文件为目标文件
             current_state["finished"] = True
 
     except Exception as e:
@@ -346,7 +348,7 @@ def add_bookmarks(pdf_path: str, chapters: list) -> None: # 给 PDF 添加书签
         writer = PdfWriter()
         writer.append_pages_from_reader(reader)
 
-        def add_chapter(chapter_list, parent=None): # 递归添加书签的内部函数
+        def add_chapter(chapter_list: list, parent=None): # 递归添加书签的内部函数
             for chapter in chapter_list:
                 title = chapter.get("title", "未知章节")
                 p_index = chapter.get("page_index")
@@ -398,7 +400,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     label.pack(pady=5)
 
     # 创建多行 Text
-    token_text = tk.Text(frame, width=50, height=4, wrap="word", font=(ui_font_family, 9))
+    token_text = tk.Text(frame, width=50, height=4, wrap="word", undo=True, font=(ui_font_family, 9), relief="solid")
     token_text.pack(pady=5)
     bind_context_menu(token_text)
     bind_tab_navigation(token_text)
@@ -429,7 +431,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
 
     # 帮助按钮
     def show_token_help():
-        help_win = tk.Toplevel(token_window, takefocus=True)
+        help_win = tk.Toplevel(token_window)
         help_win.title("获取 Access Token 方法")
         help_win.resizable(False, False) # 禁止调整窗口大小
         help_win.focus() # 自动获得焦点
@@ -461,20 +463,23 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
 然后在控制台输出中即可看到 Access Token。将其复制后粘贴到本程序中。"""
 
         # 只读文本区，支持选择复制
-        txt = tk.Text(help_frame, wrap="word", font=(ui_font_family, 9))
+        txt = tk.Text(help_frame, wrap="word", font=(ui_font_family, 9), relief="solid")
         txt.insert("1.0", help_text)
         txt.config(state="disabled")
         txt.pack(fill="both", expand=True)
 
         # 同样可给帮助文本区绑定右键菜单
         help_menu = tk.Menu(txt, tearoff=0)
-        help_menu.add_command(label="复制 (Ctrl＋C)", command=lambda: txt.event_generate("<<Copy>>"))
-        def show_help_menu(event):
+        help_menu.add_command(label="复制 (C)", underline=4, accelerator="Ctrl+C", command=lambda: txt.event_generate("<<Copy>>"))
+        help_menu.add_command(label="全选 (A)", underline=4, accelerator="Ctrl+A", command=lambda: txt.event_generate("<<SelectAll>>"))
+
+        def show_help_menu(event: tk.Event) -> None:
             help_menu.post(event.x_root, event.y_root)
             help_menu.bind("<FocusOut>", lambda e: help_menu.unpost())
             root.bind("<Button-1>", lambda e: help_menu.unpost(), add="+")
 
         txt.bind("<Button-3>", show_help_menu)
+        txt.bind("<Menu>", show_context_menu) # BUG: 按下菜单键不起作用
         if os_name == "Darwin":
             txt.bind("<Control-Button-1>", show_help_menu)
             txt.bind("<Button-2>", show_help_menu)
@@ -587,7 +592,7 @@ def set_access_token(token: str) -> str: # 设置并更新 Access Token
         return "Access Token 已保存！\n因出现错误而无法持久化，下次启动时仍需手动输入 Access Token。"
 
 class resource_helper: # 获取网站上资源的数据
-    def parse_hierarchy(self, hierarchy) -> dict: # 解析层级数据
+    def parse_hierarchy(self, hierarchy: list) -> dict: # 解析层级数据
         if not hierarchy: # 如果没有层级数据，返回空字典
             return {}
 
@@ -654,7 +659,7 @@ class resource_helper: # 获取网站上资源的数据
                     tag_paths: list[str] = [tag["tag_id"] for tag in sorted(lesson["tag_list"], key=lambda tag: tag["order_num"])]
 
                     # 分别解析课件层级（tag_paths 为乱序）
-                    def parse_tag_path(hier):
+                    def parse_tag_path(hier: dict) -> dict:
                         for p in tag_paths:
                             if hier["children"] and hier["children"].get(p):
                                 return parse_tag_path(hier["children"].get(p))
@@ -675,17 +680,17 @@ class resource_helper: # 获取网站上资源的数据
         # lesson_hier = self.fetch_lesson_list()
         return { **book_hier }
 
-def thread_it(func, args: tuple = ()) -> None: # 打包函数到线程
+def thread_it(func: callable, args: tuple = ()) -> None: # 打包函数到线程
     t = threading.Thread(target=func, args=args)
     t.daemon = True
     t.start()
 
-def ui_call(func, *args, **kwargs) -> None: # 在主线程执行 Tkinter UI 更新
+def ui_call(func: callable, *args: tuple, **kwargs: dict) -> None: # 在主线程执行 Tkinter UI 更新
     if app_closing:
         return
 
     try:
-        root.after(0, lambda: (not app_closing) and func(*args, **kwargs))
+        root.after(0, lambda: not app_closing and func(*args, **kwargs))
     except Exception:
         # 主窗口销毁后，root.after 会抛错，直接忽略即可
         pass
@@ -848,7 +853,7 @@ description = """\
 📌 请在右侧的文本框中输入一个或多个资源页面的网址（每个网址一行）。
 🔗 资源页面网址示例：
       https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=...
-📝 您也可以直接在左侧的列表中选择教材。
+📝 您也可以直接在左侧的列表中选择资源。
 📥 点击 “下载” 按钮后，程序会解析并下载资源。
 ❗ 注：为了更可靠地下载，建议点击 “设置 Token” 按钮，参照里面的说明完成设置。"""
 description_label = ttk.Label(container_frame, text=description, font=(ui_font_family, 9)) # 添加描述标签
@@ -865,9 +870,9 @@ text_pane.rowconfigure(1, weight=1)
 paned.add(treeview_pane)
 paned.add(text_pane)
 paned.update_idletasks()
-root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%
+root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%（不能使用 ui_call）
 
-treeview_label = ttk.Label(treeview_pane, text="教材列表", font=(ui_font_family, 10, "bold")) # 添加树视图标签
+treeview_label = ttk.Label(treeview_pane, text="资源列表", font=(ui_font_family, 10, "bold")) # 添加树视图标签
 treeview_label.grid(row=0, column=0, sticky="w")
 style = ttk.Style(root)
 style.configure("Custom.Treeview", rowheight=int(30 * scale), font=(ui_font_family, 9))
@@ -883,12 +888,12 @@ treeview_scrollbar.grid(row=1, column=1, sticky="ns")
 
 url_label = ttk.Label(text_pane, text="资源页面网址", font=(ui_font_family, 10, "bold")) # 添加 URL 标签
 url_label.grid(row=0, column=0, sticky="w")
-url_text = tk.Text(text_pane, wrap="word", font=(ui_font_family, 9)) # 添加 URL 输入框
+url_text = tk.Text(text_pane, wrap="word", undo=True, font=(ui_font_family, 9), relief="solid") # 添加 URL 输入框
 url_text.grid(row=1, column=0, sticky="nsew")
 bind_context_menu(url_text) # 为 URL 输入框创建右键菜单
 bind_tab_navigation(url_text) # 绑定 Tab 键导航
 text_scrollbar = ttk.Scrollbar(text_pane, orient="vertical", command=url_text.yview)
-url_text.configure(relief="solid", undo=True, yscrollcommand=lambda f, l: auto_hide_scrollbar(text_scrollbar, f, l))
+url_text.configure(yscrollcommand=lambda f, l: auto_hide_scrollbar(text_scrollbar, f, l))
 text_scrollbar.grid(row=1, column=1, sticky="ns")
 url_text.focus()
 
@@ -933,10 +938,15 @@ def on_tree_select(event: tk.Event) -> None: # 处理树视图选择事件
 
         resource_type = resource_data.get("resource_type_code") or "assets_document"
         content_id = resource_data.get("content_id") or item.split(":")[-1]
-        if url_text.get("1.0", "end") == "\n": # URL 输入框为空的时候，插入的内容前面不加换行
-            url_text.insert("end", f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={content_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
+        if resource_type == "teachingmaterials":
+            url = f"https://basic.smartedu.cn/syncClassroom?defaultTag={"%2F".join(item.split(':')[1:])}"
         else:
-            url_text.insert("end", f"\nhttps://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={content_id}&catalogType=tchMaterial&subCatalog=tchMaterial")
+            url = f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={content_id}&catalogType=tchMaterial&subCatalog=tchMaterial"
+
+        if url_text.get("1.0", "end") == "\n": # URL 输入框为空的时候，插入的内容前面不加换行
+            url_text.insert("end", url)
+        else:
+            url_text.insert("end", f"\n{url}")
         url_text.see("end") # 滚动到文本框底部
 
 build_tree_items("", resource_list, open_sub=True) # 构建树视图项，初始展开一级目录
@@ -967,7 +977,7 @@ download_progress_bar = ttk.Progressbar(button_frame, length=125 * scale, mode="
 download_progress_bar.pack(side="bottom", pady=int(10 * scale), ipady=int(5 * scale)) # 设置垂直外边距、进度条高度（跟随缩放）
 
 # 下载进度标签
-progress_label = ttk.Label(button_frame, text="等待下载", anchor="center") # 初始时文本为空，居中
+progress_label = ttk.Label(button_frame, text="等待下载", anchor="center", font=(ui_font_family, 9)) # 初始时文本为空，居中
 progress_label.pack(side="bottom", pady=int(5 * scale)) # 设置垂直外边距、标签高度（跟随缩放）
 
 center_window(root) # 让窗口居中
