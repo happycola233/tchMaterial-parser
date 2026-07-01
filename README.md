@@ -28,9 +28,19 @@
 > [!WARNING]
 > 在 macOS 操作系统中，由于没有签名，系统会报告文件已被损坏，因此需要先运行 `xattr -cr /path/to/tchMaterial-parser.app` 来移除应用的 “隔离” 属性。为了保证 Access Token 的持久化，建议将应用移动到 `/Applications` 目录下再运行。
 
+### WinGet
+
+在 **Windows 10、Windows 11 与 Windows Server 2025** 上，您可以直接在终端中输入以下命令来安装本程序：
+
+```batch
+winget install tchMaterial-parser
+```
+
+感谢 [@PtJade-Ceramic](https://github.com/PtJade-Ceramic) 的建议（[#64](../../issues/64)）！
+
 ### Arch 用户软件仓库（AUR）
 
-对于 **Arch Linux** 操作系统，本程序已发布至[Arch 用户软件仓库](https://aur.archlinux.org/packages/tchmaterial-parser)，因此您还可以通过在终端中输入以下命令安装：
+对于 **Arch Linux** 操作系统，本程序已发布至 [Arch 用户软件仓库](https://aur.archlinux.org/packages/tchmaterial-parser)，因此您可以在终端中输入以下命令来安装本程序：
 
 ```sh
 yay -S tchmaterial-parser
