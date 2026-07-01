@@ -21,7 +21,7 @@
 
 ### GitHub Releases
 
-本项目的 [GitHub Releases 页面](https://github.com/happycola233/tchMaterial-parser/releases)会发布**适用于 Windows、Linux 的 x86_64 架构**与**适用于 Linux、macOS 的 Arm64 架构**的程序。
+本项目的 [GitHub Releases 页面](../../releases)会发布适用于 **Windows、Linux、macOS** 的 **x86_64、Arm64** 架构的程序。
 
 下载完成之后不需要额外的安装步骤。Windows 和 Linux 可直接运行本程序。
 
