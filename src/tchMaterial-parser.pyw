@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-# 国家中小学智慧教育平台 资源下载工具 v3.3.2
+# 国家中小学智慧教育平台 资源下载工具 v3.3.4
 # 项目地址：https://github.com/happycola233/tchMaterial-parser
 # 作者：肥宅水水呀（https://space.bilibili.com/324042405）以及其他为本工具作出贡献的用户
 
-VERSION = "v3.3.2"
+VERSION = "v3.3.4"
 
 # 导入相关库
 import tkinter as tk
@@ -102,13 +102,11 @@ def parse(url: str, bookmarks: bool) -> tuple[str, str, list] | tuple[None, None
             if item["ti_is_source_file"]: # 获取并构造资源的 URL
                 resource_url = item.get("ti_storage")
                 if resource_url:
-                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn" if access_token else "https://c1.ykt.cbern.com.cn")
+                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
                 else:
                     resource_url = next((url for url in item["ti_storages"] if url), None)
                     if not resource_url:
                         continue
-                    if not access_token: # 未登录时，通过一个不可靠的方法构造可直接下载的 URL
-                        resource_url = re.sub(r"^https?://(?:.+).ykt.cbern.com.cn/(.+)$", r"https://c1.ykt.cbern.com.cn/\1", resource_url)
                 break
 
         if not resource_url:
@@ -122,13 +120,11 @@ def parse(url: str, bookmarks: bool) -> tuple[str, str, list] | tuple[None, None
                             if item["ti_is_source_file"]:
                                 resource_url = item.get("ti_storage")
                                 if resource_url:
-                                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn" if access_token else "https://c1.ykt.cbern.com.cn")
+                                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
                                 else:
                                     resource_url = next((url for url in item["ti_storages"] if url), None)
                                     if not resource_url:
                                         continue
-                                    if not access_token:
-                                        resource_url = re.sub(r"^https?://(?:.+).ykt.cbern.com.cn/(.+)$", r"https://c1.ykt.cbern.com.cn/\1", resource_url)
                                 outer_break = True # 跳出外层循环
                                 break
                     if outer_break:
@@ -229,7 +225,7 @@ def parse_and_copy() -> None: # 解析并复制链接
 
     if resource_links:
         pyperclip.copy("\n".join(resource_links)) # 将链接复制到剪贴板
-        messagebox.showinfo("提示", "资源链接已复制到剪贴板")
+        messagebox.showinfo("提示", "资源链接已复制到剪贴板。\n注意：链接可能无法直接下载，需要加上认证请求头才能下载。")
 
 def download() -> None: # 下载资源文件
     global download_states
@@ -521,6 +517,7 @@ def load_access_token() -> None: # 读取本地存储的 Access Token
                 if token:
                     access_token = token
                     # 更新请求头
+                    headers["Authorization"] = f"Bearer {access_token}"
                     headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
         elif os_name == "Linux": # 在 Linux 上，从 ~/.config/tchMaterial-parser/data.json 文件读取
             # 构建文件路径
@@ -559,6 +556,7 @@ def load_access_token() -> None: # 读取本地存储的 Access Token
 def set_access_token(token: str) -> str: # 设置并更新 Access Token
     global access_token
     access_token = token
+    headers["Authorization"] = f"Bearer {access_token}"
     headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
 
     try:
@@ -731,7 +729,7 @@ session = requests.Session() # 初始化请求
 download_states = [] # 初始化下载状态
 app_closing = False
 access_token = None
-headers = { "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
+headers = { "Authorization": "Bearer 0", "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
 session.proxies = {} # 全局忽略代理
 
 scale: float | None = None
