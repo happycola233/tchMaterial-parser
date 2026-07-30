@@ -13,9 +13,37 @@ on:
         type: string
 
 jobs:
-  build-windows-x64:
-    name: Build Windows x64 App
-    runs-on: windows-latest
+  build:
+    name: Build ${{ matrix.name }} App
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 不要因为某一个平台构建失败就取消其余平台的构建
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            binary: tchMaterial-parser.exe
+            asset: tchMaterial-parser-windows-x64.exe
+          - name: Windows Arm64
+            os: windows-11-arm
+            binary: tchMaterial-parser.exe
+            asset: tchMaterial-parser-windows-arm64.exe
+          - name: Linux x64
+            os: ubuntu-latest
+            binary: tchMaterial-parser
+            asset: tchMaterial-parser-linux-x64
+          - name: Linux Arm64
+            os: ubuntu-24.04-arm
+            binary: tchMaterial-parser
+            asset: tchMaterial-parser-linux-arm64
+          - name: macOS x64
+            os: macos-26-intel
+            asset: tchMaterial-parser-mac-x64.zip
+          - name: macOS Arm64
+            os: macos-26
+            asset: tchMaterial-parser-mac-arm64.zip
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -27,216 +55,28 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m venv .venv
-          .venv\Scripts\activate
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
 
       - name: Build app with PyInstaller
-        run: |
-          .venv\Scripts\activate
-          pyinstaller ./tchMaterial-parser.spec
+        run: pyinstaller ./tchMaterial-parser.spec
 
-      - name: Pack app
-        run: |
-          cd dist
-          mv tchMaterial-parser.exe tchMaterial-parser-windows-x64.exe
+      # Windows 与 Linux 构建出的是单个可执行文件，改名后直接上传
+      - name: Pack app (Windows / Linux)
+        if: runner.os != 'macOS'
+        shell: bash
+        run: mv "dist/${{ matrix.binary }}" "dist/${{ matrix.asset }}"
 
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/tchMaterial-parser-windows-x64.exe
-          tag_name: ${{ inputs.tag || github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-windows-arm64:
-    name: Build Windows Arm64 App
-    runs-on: windows-11-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          .venv\Scripts\activate
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
-
-      - name: Build app with PyInstaller
-        run: |
-          .venv\Scripts\activate
-          pyinstaller ./tchMaterial-parser.spec
-
-      - name: Pack app
-        run: |
-          cd dist
-          mv tchMaterial-parser.exe tchMaterial-parser-windows-arm64.exe
+      # macOS 构建出的是 .app 应用包（一个目录），需用 ditto 打包为 zip 以保留资源分支与权限
+      - name: Pack app (macOS)
+        if: runner.os == 'macOS'
+        run: /usr/bin/ditto -c -k --keepParent -rsrc dist/tchMaterial-parser.app "dist/${{ matrix.asset }}"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/tchMaterial-parser-windows-arm64.exe
-          tag_name: ${{ inputs.tag || github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-linux-x64:
-    name: Build Linux x64 App
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
-
-      - name: Build app with PyInstaller
-        run: |
-          source .venv/bin/activate
-          pyinstaller ./tchMaterial-parser.spec
-
-      - name: Pack app
-        run: |
-          cd dist
-          mv tchMaterial-parser tchMaterial-parser-linux-x64
-
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/tchMaterial-parser-linux-x64
-          tag_name: ${{ inputs.tag || github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-linux-arm64:
-    name: Build Linux Arm64 App
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
-
-      - name: Build app with PyInstaller
-        run: |
-          source .venv/bin/activate
-          pyinstaller ./tchMaterial-parser.spec
-
-      - name: Pack app
-        run: |
-          cd dist
-          mv tchMaterial-parser tchMaterial-parser-linux-arm64
-
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/tchMaterial-parser-linux-arm64
-          tag_name: ${{ inputs.tag || github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos-x64:
-    name: Build macOS x64 App
-    runs-on: macos-26-intel
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
-
-      - name: Build app with PyInstaller
-        run: |
-          source .venv/bin/activate
-          pyinstaller ./tchMaterial-parser.spec
-
-      - name: Pack app
-        run: |
-          cd dist
-          /usr/bin/ditto -c -k --keepParent -rsrc tchMaterial-parser.app tchMaterial-parser-mac-x64.zip
-
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/tchMaterial-parser-mac-x64.zip
-          tag_name: ${{ inputs.tag || github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos-arm64:
-    name: Build macOS Arm64 App
-    runs-on: macos-26
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-
-      - name: Install dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
-
-      - name: Build app with PyInstaller
-        run: |
-          source .venv/bin/activate
-          pyinstaller ./tchMaterial-parser.spec
-
-      - name: Pack app
-        run: |
-          cd dist
-          /usr/bin/ditto -c -k --keepParent -rsrc tchMaterial-parser.app tchMaterial-parser-mac-arm64.zip
-
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/tchMaterial-parser-mac-arm64.zip
+          files: dist/${{ matrix.asset }}
           tag_name: ${{ inputs.tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
