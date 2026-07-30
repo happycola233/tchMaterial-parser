@@ -102,7 +102,7 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
 
         if not response.ok: # 服务器返回表示错误的 HTTP 状态码
             current_state["finished"] = True
-            current_state["failed_reason"] = f"服务器返回 HTTP 状态码 {response.status_code}" + "，Access Token 可能已过期或无效，请重新设置" if response.status_code == 401 or response.status_code == 403 else ""
+            current_state["failed_reason"] = f"服务器返回 HTTP 状态码 {response.status_code}" + ("，Access Token 可能已过期或无效，请重新设置" if response.status_code in (401, 403) else "")
         else:
             temp_path = f"{save_path}.tmp"
             current_state["total_size"] = int(response.headers.get("Content-Length", 0))
