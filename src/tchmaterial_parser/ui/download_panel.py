@@ -96,6 +96,7 @@ def download() -> None: # 下载资源文件
 def download_file(url: str, save_path: str, chapters: list[dict] | None = None) -> None: # 下载文件
     current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None }
     download_states.append(current_state)
+    temp_path = f"{save_path}.tmp"
 
     try:
         response = session.get(url, headers=headers, stream=True)
@@ -104,7 +105,6 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
             current_state["finished"] = True
             current_state["failed_reason"] = f"服务器返回 HTTP 状态码 {response.status_code}" + ("，Access Token 可能已过期或无效，请重新设置" if response.status_code in (401, 403) else "")
         else:
-            temp_path = f"{save_path}.tmp"
             current_state["total_size"] = int(response.headers.get("Content-Length", 0))
 
             with open(temp_path, "wb") as file:
@@ -137,6 +137,10 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
         current_state["downloaded_size"], current_state["total_size"] = 0, 0
         current_state["finished"] = True
         current_state["failed_reason"] = traceback.format_exc().rstrip()
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
 
     if all(state["finished"] for state in download_states): # 所有文件下载完成
         ui_call(download_progress_bar.config, value=0) # 重置进度条

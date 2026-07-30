@@ -4,28 +4,34 @@
 import json, os
 
 from .network import headers
-from .platform_utils import os_name, winreg
+from .platform_utils import os_name, print_error, winreg
 
 access_token: str | None = None
 
 REGISTRY_PATH = "Software\\tchMaterial-parser" # Windows 下存放配置的注册表键
 CONFIG_KEYS = { "access_token": "AccessToken", "theme": "Theme" } # 配置项名称到注册表值名称的映射（JSON 文件直接使用配置项名称）
 
-def config_file_path() -> str: # 获取配置文件路径（非 Windows 平台）
-    if os_name == "Linux": # 在 Linux 上，配置存放于 ~/.config/tchMaterial-parser/data.json
-        return os.path.join(os.path.expanduser("~"), ".config", "tchMaterial-parser", "data.json") # os.path.expanduser("~") 为当前用户主目录
-    if os_name == "Darwin": # 在 macOS 上，配置存放于 ~/Library/Application Support/tchMaterial-parser/data.json
+def config_file_path() -> str | None: # 获取配置文件路径
+    if os_name == "Windows": # 在 Windows 上，配置存放于 %LOCALAPPDATA%\tchMaterial-parser\data.json（此处为备用）
+        return os.path.join(
+            os.getenv("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local"), # os.path.expanduser("~") 为当前用户主目录
+            "tchMaterial-parser",
+            "data.json",
+        )
+    elif os_name in ("Linux", "Android"): # 在 Linux 上，配置存放于 ~/.config/tchMaterial-parser/data.json
+        return os.path.join(os.path.expanduser("~"), ".config", "tchMaterial-parser", "data.json")
+    elif os_name == "Darwin": # 在 macOS 上，配置存放于 ~/Library/Application Support/tchMaterial-parser/data.json
         return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "tchMaterial-parser", "data.json")
-    raise RuntimeError(f"不支持的操作系统：{os_name}")
 
 def config_location() -> str: # 获取配置存放位置的描述文本，用于提示用户
     if os_name == "Windows":
-        return f"注册表：HKEY_CURRENT_USER\\{REGISTRY_PATH}"
-    if os_name == "Linux":
-        return "文件：~/.config/tchMaterial-parser/data.json"
-    if os_name == "Darwin":
-        return "文件：~/Library/Application Support/tchMaterial-parser/data.json"
-    raise RuntimeError(f"不支持的操作系统：{os_name}")
+        return f"已写入注册表：HKEY_CURRENT_USER\\{REGISTRY_PATH}"
+    elif os_name in ("Linux", "Android"):
+        return "已保存至文件：~/.config/tchMaterial-parser/data.json"
+    elif os_name == "Darwin":
+        return "已保存至文件：~/Library/Application Support/tchMaterial-parser/data.json"
+    else:
+        return "本工具尚未支持该操作系统下 Access Token 的持久化，下次启动时仍需手动输入 Access Token。"
 
 def load_config() -> dict[str, str]: # 读取本地存储的配置
     config: dict[str, str] = {}
@@ -39,27 +45,37 @@ def load_config() -> dict[str, str]: # 读取本地存储的配置
                     except FileNotFoundError: # 该配置项尚未写入
                         continue
                     if not isinstance(value, str):
-                        raise TypeError(f"配置项 {name} 必须是字符串")
+                        print_error(TypeError(f"配置项 {name} 必须是字符串"))
+                        continue
                     config[name] = value
-        except FileNotFoundError: # 注册表键不存在，即从未保存过配置
             return config
-        return config
+        except FileNotFoundError: # 注册表键不存在，即从未保存过配置
+            return {}
+        except Exception as e:
+            print_error(e)
+            return {}
 
-    target_file = config_file_path() # 在其他平台上，从 JSON 文件读取
-    if not os.path.exists(target_file): # 文件不存在表示尚未保存过配置
+    try:
+        target_file = config_file_path() # 在其他平台上，从 JSON 文件读取
+        if not target_file or not os.path.exists(target_file): # 文件不存在表示尚未保存过配置
+            return {}
+        with open(target_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            print_error(TypeError("配置文件的根节点必须是对象"))
+            return {}
+        for name in CONFIG_KEYS:
+            if name not in data:
+                continue
+            value = data[name]
+            if not isinstance(value, str):
+                print_error(TypeError(f"配置项 {name} 必须是字符串"))
+                continue
+            config[name] = value
         return config
-    with open(target_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    if not isinstance(data, dict):
-        raise TypeError("配置文件的根节点必须是对象")
-    for name in CONFIG_KEYS:
-        if name not in data:
-            continue
-        value = data[name]
-        if not isinstance(value, str):
-            raise TypeError(f"配置项 {name} 必须是字符串")
-        config[name] = value
-    return config
+    except Exception as e:
+        print_error(e)
+        return {}
 
 def save_config(**updates: str) -> None: # 保存配置，并与已有配置合并
     if os_name == "Windows": # 在 Windows 上，写入注册表
@@ -90,4 +106,4 @@ def set_access_token(token: str) -> str: # 设置并更新 Access Token
     access_token = token
     headers["Authorization"] = f"Bearer {access_token or '0'}"
     headers["X-ND-AUTH"] = f'MAC id="{access_token or "0"}",nonce="0",mac="0"'
-    return f"Access Token 已保存！\n已写入{config_location()}"
+    return f"Access Token 已保存！\n{config_location()}"

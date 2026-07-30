@@ -4,9 +4,9 @@
 
 # tchMaterial-parser
 
-**[国家中小学智慧教育平台](https://basic.smartedu.cn/)[电子课本](https://basic.smartedu.cn/tchMaterial/)下载工具**
+**[国家中小学智慧教育平台](https://basic.smartedu.cn/) [电子课本](https://basic.smartedu.cn/tchMaterial/)下载工具**
 
-一键解析并批量下载电子课本 PDF，自动命名、自动添加书签，开箱即用。
+一键解析并批量下载电子课本文件，自动命名、自动添加书签，开箱即用。
 
 <br />
 
@@ -18,6 +18,8 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 
 [![Trendshift](https://trendshift.io/api/badge/repositories/13774)](https://trendshift.io/repositories/13774)
+
+感谢每一位使用者与贡献者，本项目于 2025 年 5 月登上 **GitHub Trending 总榜第 3 名**（单日新增约 400 Stars），并获得 [**Trendshift Python 日榜第 3 名**](https://trendshift.io/repositories/13774) 🎉
 
 [📥 下载安装](#-下载与安装方法) · [🛠️ 使用方法](#️-使用方法) · [❓ 常见问题](#-常见问题) · [🐛 反馈问题](../../issues)
 
@@ -37,7 +39,6 @@
 ## 📖 目录
 
 - [✨ 工具特点](#-工具特点)
-- [🏆 项目成就](#-项目成就)
 - [📥 下载与安装方法](#-下载与安装方法)
 - [🛠️ 使用方法](#️-使用方法)
 - [❓ 常见问题](#-常见问题)
@@ -48,7 +49,7 @@
 
 ## ✨ 工具特点
 
-- 📚 **支持批量下载**：一次输入多个电子课本预览页面网址，即可批量下载 PDF 课本文件。
+- 📚 **支持批量下载**：一次输入多个电子课本预览页面网址，即可批量下载电子课本文件。
 - 📂 **自动命名文件**：工具会自动使用电子课本的名称作为默认文件名，方便管理下载的课本文件。
 - 🔖 **自动添加书签**：若勾选了 “添加书签” 选项，则会在下载完成后为电子课本添加书签，在查看 PDF 时可更方便地跳转到指定位置。
 - 🔑 **支持 Access Token**：支持用户[手动输入 Access Token](#2--设置-access-token可选) 并自动保存，下次启动可自动加载。
@@ -57,18 +58,14 @@
 - 🌗 **深色模式**：启动时自动跟随系统的浅色/深色模式，也可点击右上角的按钮手动切换，切换结果会被记住。
 - 💻 **跨平台支持**：支持 Windows、Linux、macOS 等操作系统（需要图形界面）。
 
-## 🏆 项目成就
-
-感谢每一位使用者与贡献者，本项目曾于 2025 年 5 月登上 **GitHub Trending 总榜第 3 名**（单日新增约 400 Stars），并获得 [Trendshift](https://trendshift.io/repositories/13774) **Python 日榜第 3 名**。
-
 ## 📥 下载与安装方法
 
 | 方式 | 适用平台 | 获取途径 |
 | :-- | :-- | :-- |
-| 🐙 **GitHub Releases** | Windows / Linux / macOS（x86_64、Arm64） | [前往 Releases 页面](../../releases) |
-| 📦 **WinGet** | Windows 10 / 11 / Server 2025 | `winget install tchMaterial-parser` |
-| 🐧 **AUR** | Arch Linux | `yay -S tchmaterial-parser` |
-| 🐍 **从源码运行** | 任意平台（需 Python 3.10+） | [见下文](#从源码运行) |
+| [🐙 **GitHub Releases**](#github-releases) | Windows / Linux / macOS（x86_64、Arm64） | [前往 Releases 页面](../../releases) |
+| [📦 **WinGet**](#winget) | Windows 10 / 11 / Server 2025 | `winget install tchMaterial-parser` |
+| [🐧 **AUR**](#arch-用户软件仓库aur) | Arch Linux | `yay -S tchmaterial-parser` |
+| [🐍 **从源码运行**](#从源码运行) | 任意平台（需 Python 3.10+） | [见下文](#从源码运行) |
 
 ### GitHub Releases
 
@@ -101,19 +98,19 @@ yay -S tchmaterial-parser
 
 ### 从源码运行
 
-若您想体验最新的改动，或是希望参与开发，可以直接从源码运行本工具。需要 **Python 3.10 或更高版本**（代码中使用了 `X | Y` 形式的类型注解）。
+若您想体验最新的改动，或是希望参与开发，可以直接从源码运行本工具，需要 **Python 3.10 或更高版本**（`X | Y` 形式的类型注解仅在该版本及以后的版本可用）。
 
 ```sh
 git clone https://github.com/happycola233/tchMaterial-parser.git
 cd tchMaterial-parser
-pip install -r requirements.txt
-python src/main.py
+pip install -r ./requirements.txt
+python ./src/main.py
 ```
 
 > [!NOTE]
 > 本工具使用 Tkinter 构建图形界面。Windows 与 macOS 的官方 Python 通常已自带，而部分 Linux 发行版需要单独安装，例如在 Debian/Ubuntu 上执行 `sudo apt install python3-tk`。
 >
-> 此外，精简安装的 Linux 系统可能缺少中文字体与 Emoji 字体，界面上会出现方块。可按需安装，例如在 Debian/Ubuntu 上执行 `sudo apt install fonts-noto-cjk fonts-noto-color-emoji`。
+> 此外，精简安装的 Linux 系统可能缺少中文字体与 Emoji 字体，此时界面上可能会出现方框等异常现象。可按需安装，例如在 Debian/Ubuntu 上执行 `sudo apt install fonts-noto-cjk fonts-noto-color-emoji`。
 
 若您想自行打包为可执行文件，可以在安装 `pyinstaller` 后执行：
 
@@ -121,7 +118,7 @@ python src/main.py
 pyinstaller ./tchMaterial-parser.spec
 ```
 
-产物位于 `dist/` 目录中。
+编译后的程序位于 `dist` 目录中。
 
 ## 🛠️ 使用方法
 
@@ -213,7 +210,7 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 - **Windows**：Token 会存储在**注册表** `HKEY_CURRENT_USER\Software\tchMaterial-parser` 项中的 `AccessToken` 值。
 - **Linux**：Token 会存储在**文件** `~/.config/tchMaterial-parser/data.json` 中。
 - **macOS**：Token 会存储在**文件** `~/Library/Application Support/tchMaterial-parser/data.json` 中。
-- **其他操作系统**：目前不受支持。
+- **其他操作系统**：目前暂不支持持久化，目前我们正在寻找通用的解决方案。
 
 </details>
 

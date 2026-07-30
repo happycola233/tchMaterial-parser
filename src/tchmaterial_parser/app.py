@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # 程序主流程：初始化配置、拉取资源列表、装配主窗口并进入主循环
 
-import os
+import os, sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 import psutil
@@ -62,19 +62,24 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
 
     if not scale: # 若获取缩放因子失败，通过 Tkinter 估算缩放因子
         try:
-            scale: float = round(root.winfo_fpixels("1i") / 96.0, 2)
+            scale = round(root.winfo_fpixels("1i") / 96.0, 2)
         except Exception:
             scale = 1.0
-    root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
 
-    # 界面元素的尺寸另算：Tk 在 macOS 上把屏幕 DPI 报成 72（即上面算出的 scale 为 0.75），
-    # 部分 X server 也是如此，若直接拿来乘字号会把界面缩小四分之一。macOS 会自行处理 Retina 缩放，故固定取 1
+    # 在 macOS 上，Tk 通常把 DPI 报成 72（即 scale 为 0.75），需把 scaling 除以 0.75 以补偿；
+    # 其它平台直接使用检测到的缩放因子（至少 1.0）。
+    if os_name == "Darwin":
+        root.tk.call("tk", "scaling", max(scale / 0.75, 1.0))
+    else:
+        root.tk.call("tk", "scaling", max(scale, 1.0))
+
+    # 界面元素的尺寸另算：macOS 会自行处理 Retina 缩放，故固定取 1。
     runtime.ui_scale = 1.0 if os_name == "Darwin" else max(scale, 1.0)
     root.title(f"国家中小学智慧教育平台 资源下载工具 {VERSION}") # 设置窗口标题
 
     # 应用主题：优先沿用用户上次手动切换的结果，否则跟随系统的浅色/深色模式
     saved_theme = saved_config.get("theme")
-    theme.apply_theme(saved_theme if saved_theme in theme.THEME_COLORS else theme.detect_system_theme())
+    theme.apply_theme(saved_theme)
 
     def set_icon() -> Image.Image: # 设置窗口图标，并返回图标图像以供标题栏左侧的 logo 复用
         # 源码运行时直接读取 assets 中的原图；打包后由 spec 的 datas 收集到相同的相对路径
@@ -97,19 +102,27 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
 
         runtime.app_closing = True
 
-        current_process = psutil.Process(os.getpid()) # 获取自身的进程 ID
-        child_processes = current_process.children(recursive=True) # 获取自身的所有子进程
+        try:
+            current_process = psutil.Process(os.getpid()) # 获取自身的进程 ID
+            child_processes = current_process.children(recursive=True) # 获取自身的所有子进程
 
-        for child in child_processes: # 结束所有子进程
+            for child in child_processes: # 结束所有子进程
+                try:
+                    child.terminate() # 结束进程
+                except Exception: # 进程可能已经结束
+                    pass
+
             try:
-                child.terminate() # 结束进程
-            except Exception: # 进程可能已经结束
+                root.destroy()
+            except Exception:
+                pass
+        except Exception: # 获取子进程失败，直接退出当前进程
+            try:
+                root.destroy()
+            except Exception:
                 pass
 
-        try:
-            root.destroy()
-        except Exception:
-            pass
+            sys.exit(0)
 
     root.protocol("WM_DELETE_WINDOW", on_closing) # 注册窗口关闭事件的处理函数
 
@@ -139,18 +152,17 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     theme_icons: dict[str, ImageTk.PhotoImage] = {} # 缓存两个主题图标，并同时防止 Tk 图片被垃圾回收
 
     def update_theme_button() -> None: # 更新按钮文字与图标，使其表示点击后将切换到的主题
-        target_theme = "dark" if theme.current_theme == "light" else "light"
-        if target_theme not in theme_icons:
+        if theme.switched_theme not in theme_icons:
             icon_size = max(scaled(16), 16)
-            theme_icons[target_theme] = ImageTk.PhotoImage(make_theme_icon_image(target_theme, icon_size))
+            theme_icons[theme.switched_theme] = ImageTk.PhotoImage(make_theme_icon_image(theme.switched_theme, icon_size))
         theme_btn.config(
-            text=" 深色" if target_theme == "dark" else " 浅色",
-            image=theme_icons[target_theme],
+            text=" 浅色" if theme.switched_theme == "light" else " 深色" if theme.switched_theme == "dark" else " 跟随系统",
+            image=theme_icons[theme.switched_theme],
             compound="left",
         )
 
-    def switch_theme() -> None: # 切换浅色/深色主题
-        target_theme = "light" if theme.current_theme == "dark" else "dark"
+    def switch_theme() -> None: # 切换主题
+        target_theme = "dark" if theme.switched_theme == "light" else "light" if theme.switched_theme == "system" else "system"
         save_config(theme=target_theme)
         theme.apply_theme(target_theme)
         update_theme_button()

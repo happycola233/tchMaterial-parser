@@ -97,16 +97,7 @@ def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: 
     icon = Image.new("RGBA", (icon_size * 4, icon_size * 4), (0, 0, 0, 0))
     draw = ImageDraw.Draw(icon)
 
-    if target_theme == "dark": # 蓝色月牙表示点击后切换到深色模式
-        draw.ellipse(
-            (round(2.2 * draw_scale), round(1.4 * draw_scale), round(13.6 * draw_scale), round(14.6 * draw_scale)),
-            fill="#5b8def",
-        )
-        draw.ellipse(
-            (round(5.4 * draw_scale), round(0.4 * draw_scale), round(15.2 * draw_scale), round(11.8 * draw_scale)),
-            fill=(0, 0, 0, 0),
-        )
-    else: # 暖黄色太阳表示点击后切换到浅色模式
+    if target_theme == "light": # 暖黄色太阳表示浅色模式
         center = 8 * draw_scale
         ray_inner = 5.3 * draw_scale
         ray_outer = 7.2 * draw_scale
@@ -118,11 +109,51 @@ def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: 
             draw.line((start, end), fill="#f0b429", width=ray_width)
         radius = 3.2 * draw_scale
         draw.ellipse((center - radius, center - radius, center + radius, center + radius), fill="#f0b429")
+    elif target_theme == "dark": # 蓝色月牙表示深色模式
+        draw.ellipse(
+            (round(2.2 * draw_scale), round(1.4 * draw_scale), round(13.6 * draw_scale), round(14.6 * draw_scale)),
+            fill="#5b8def",
+        )
+        # 用透明遮罩挖掉月牙内部
+        mask = Image.new("L", icon.size, 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse(
+            (round(5.4 * draw_scale), round(0.4 * draw_scale), round(15.2 * draw_scale), round(11.8 * draw_scale)),
+            fill=255,
+        )
+        icon.paste((0, 0, 0, 0), mask=mask)
+    else: # 半太阳半月亮表示跟随系统
+        # 左侧太阳
+        center = 8 * draw_scale
+        ray_inner = 5.2 * draw_scale
+        ray_outer = 7.2 * draw_scale
+        ray_width = max(round(1.25 * draw_scale), 1)
+        # 太阳光线只绘制左侧和上方，避免过于拥挤
+        for angle in range(135, 316, 45):
+            radians = math.radians(angle)
+            start = (center + math.cos(radians) * ray_inner, center + math.sin(radians) * ray_inner)
+            end = (center + math.cos(radians) * ray_outer, center + math.sin(radians) * ray_outer)
+            draw.line((start, end), fill="#f0b429", width=ray_width)
+        radius = 3.2 * draw_scale
+        draw.ellipse((center - radius, center - radius, center + radius, center + radius), fill="#f0b429")
+
+        # 右侧月牙
+        draw.ellipse(
+            (round(7.0 * draw_scale), round(1.5 * draw_scale), round(15.0 * draw_scale), round(14.5 * draw_scale)),
+            fill="#5b8def",
+        )
+        mask = Image.new("L", icon.size, 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse(
+            (round(9.5 * draw_scale), round(0.8 * draw_scale), round(16.0 * draw_scale), round(11.5 * draw_scale)),
+            fill=255,
+        )
+        icon.paste((0, 0, 0, 0), mask=mask)
 
     return icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
 
 def make_theme_icon_image(target_theme: str, icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用几何图标
-    symbol = "🌙" if target_theme == "dark" else "☀️"
+    symbol = "☀️" if target_theme == "light" else "🌙" if target_theme == "dark" else "🌗"
     emoji_icon = render_system_emoji(symbol, icon_size)
     if emoji_icon is not None:
         return emoji_icon

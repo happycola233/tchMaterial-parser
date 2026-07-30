@@ -16,6 +16,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         content_type: str | None = None
 
         params = parse_qs(urlparse(url, 'https').query)
+
         if "contentId" in params:
             content_id = params["contentId"][0]
         else:
@@ -73,6 +74,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         def get_resource_info(resource_data) -> tuple[str, str, str, list[dict]] | None:
             title: str = resource_data.get("title")
             resource_url: str | None = None
+            format: str | None = None
 
             for item in resource_data["ti_items"]: # 寻找存有资源链接列表的项
                 if item["ti_is_source_file"]: # 获取并构造资源的 URL
@@ -83,7 +85,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                         resource_url = next((url for url in item["ti_storages"] if url), None)
                         if not resource_url:
                             continue
-                    format: str = item.get("ti_format") or "pdf"
+                    format = item.get("ti_format") or "pdf"
                     if format == "folder":
                        continue
                     break
@@ -93,7 +95,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
 
             # 通过 ebook_mapping + tree 接口组合获取章节目录
             chapters: list[dict] = []
-            if bookmarks:
+            if bookmarks and format == "pdf":
                 try:
                     mapping_url: str | None = None
                     for item in resource_data["ti_items"]:
@@ -116,7 +118,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                         page_map: list[dict] = []
                         if map_data.get("mappings"):
                             for m in map_data["mappings"]:
-                                page_map.append({"node_id": m["node_id"], "page_number": m.get("page_number", 1) })
+                                page_map.append({ "node_id": m["node_id"], "page_number": m.get("page_number", 1) })
 
                         # b. 如果有 ebook_id，在课程接口下载完整的目录树（tree API）
                         if ebook_id:

@@ -11,7 +11,8 @@ from . import runtime
 from .runtime import scaled
 from ..platform_utils import ctypes, os_name, print_error, winreg
 
-current_theme = "light" # 当前主题
+switched_theme = "system" # 选择的主题
+current_theme = "light" # 当前主题，若 switched_theme 为 `system` 则 current_theme 为系统主题（`light` 或 `dark`）
 current_colors: dict[str, str] = {} # 当前主题的配色，在 apply_theme() 中填充
 themed_widgets: set[tk.Widget] = set() # 当前仍存在且需要跟随主题调整配色的 tk 原生控件
 
@@ -115,8 +116,9 @@ def apply_widget_theme(widget: tk.Widget) -> None: # 为单个 tk 原生控件�
         widget.configure(background=current_colors["surface"], foreground=current_colors["fg"], insertbackground=current_colors["fg"], selectbackground=current_colors["selbg"], selectforeground=current_colors["selfg"], borderwidth=0, relief="flat", highlightthickness=0)
 
 def apply_theme(theme: str) -> None: # 应用浅色/深色主题
-    global current_theme, current_colors
-    current_theme = theme
+    global switched_theme, current_theme, current_colors
+    switched_theme = theme if theme in ("system", "light", "dark") else "system"
+    current_theme = theme if theme in THEME_COLORS else detect_system_theme()
     current_colors = THEME_COLORS[current_theme]
 
     sv_ttk.set_theme(current_theme, runtime.root)
