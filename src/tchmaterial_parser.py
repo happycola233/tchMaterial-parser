@@ -14,7 +14,7 @@ import threading, psutil, pyperclip
 import json, math, re, requests
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
-from PIL import Image, ImageDraw, ImageFont, ImageTk
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageTk
 from pypdf import PdfReader, PdfWriter
 import sv_ttk # Sun Valley（Windows 11 风格）主题
 
@@ -159,6 +159,13 @@ def make_theme_icon_image(target_theme: str, icon_size: int) -> Image.Image: # �
     if emoji_icon is not None:
         return emoji_icon
     return draw_theme_icon_fallback(target_theme, icon_size)
+
+def fit_cover_image(image: Image.Image, size: tuple[int, int]) -> Image.Image: # 按原始比例将封面居中放进透明画布
+    cover = ImageOps.exif_transpose(image).convert("RGBA")
+    cover.thumbnail(size, Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+    canvas.alpha_composite(cover, ((size[0] - cover.width) // 2, (size[1] - cover.height) // 2))
+    return canvas
 
 def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] | None: # 解析资源，获取资源下载链接
     try:
@@ -951,7 +958,7 @@ def apply_theme(theme: str) -> None: # 应用浅色/深色主题
     style.configure("Heading.TLabel", font="AppStrongFont")
     style.configure("Caption.TLabel", font="AppCaptionFont", foreground=current_colors["muted"])
     style.configure("Description.TLabel", font="AppBodyFont", foreground=current_colors["muted"], background=current_colors["surface"]) # 该样式用于卡片内的文字，背景需与卡片一致
-    style.configure("Custom.Treeview", font="AppBodyFont", background=current_colors["surface"], rowheight=round(32 * ui_scale))
+    style.configure("Custom.Treeview", font="AppBodyFont", background=current_colors["surface"], rowheight=round(38 * ui_scale))
     button_padding = (round(10 * ui_scale), round(4 * ui_scale)) # 增加纵向留白，使按钮在各 DPI 下保持接近 Win11 的紧凑比例
     style.configure("TButton", padding=button_padding)
     style.configure("Accent.TButton", padding=button_padding)
@@ -1292,9 +1299,16 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     tree_item_data: dict[str, dict] = {} # 键为树项 ID，值为资源数据
     tree_item_paths: dict[str, tuple[str, ...]] = {} # 保存完整分类路径，用于悬停提示
     tree_item_images: dict[str, ImageTk.PhotoImage] = {} # 缓存已加载的封面，筛选后继续复用
+    tree_preview_images: dict[str, ImageTk.PhotoImage] = {} # 缓存大尺寸封面，用于悬停预览
     loading_tree_images: set[str] = set()
     tree_font = tkfont.nametofont("AppBodyFont")
+    tree_cover_size = (round(26 * ui_scale), round(28 * ui_scale))
+    tree_cover_gap = round(8 * ui_scale) # 用透明区域拉开封面与标题，避免改变封面尺寸
+    preview_cover_size = (round(80 * ui_scale), round(112 * ui_scale))
     tree_content_width = 0
+
+    def get_tree_cover_gap(display_name: str) -> int: # 名称以中文左括号开头时不添加封面与标题间隔
+        return 0 if display_name.startswith("（") else tree_cover_gap
 
     def build_tree_items(parent: str, items: dict[str, dict], parent_names: tuple[str, ...], expand_all: bool) -> None: # 递归构建树视图项
         nonlocal tree_content_width
@@ -1317,7 +1331,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
                 build_tree_items(item_id, children, path_names, expand_all)
 
             depth_width = len(path_names) * round(20 * ui_scale)
-            image_width = round(34 * ui_scale) if option_data.get("custom_properties", {}).get("thumbnails") else 0
+            image_width = tree_cover_size[0] + get_tree_cover_gap(display_name) + round(4 * ui_scale) if option_data.get("custom_properties", {}).get("thumbnails") else 0
             tree_content_width = max(tree_content_width, depth_width + image_width + tree_font.measure(display_name) + round(20 * ui_scale))
 
     def resize_tree_column(width: int) -> None: # 让树列至少铺满可视区域，内容过长时启用横向滚动
@@ -1327,10 +1341,14 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
         loading_tree_images.discard(item_id)
         if image is None:
             return
-        photo = ImageTk.PhotoImage(image)
-        tree_item_images[item_id] = photo
+        tree_image = fit_cover_image(image, tree_cover_size)
+        cover_gap = get_tree_cover_gap(tree_item_data[item_id]["display_name"])
+        if cover_gap:
+            tree_image = ImageOps.expand(tree_image, border=(0, 0, cover_gap, 0), fill=(0, 0, 0, 0))
+        tree_item_images[item_id] = ImageTk.PhotoImage(tree_image)
+        tree_preview_images[item_id] = ImageTk.PhotoImage(image)
         if treeview.exists(item_id):
-            treeview.item(item_id, image=photo)
+            treeview.item(item_id, image=tree_item_images[item_id])
 
     def load_tree_icon(item_id: str, url: str) -> None: # 在线程中下载封面，在主线程中更新控件
         try:
@@ -1338,8 +1356,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
             if not resp.ok:
                 ui_call(apply_tree_icon, item_id, None)
                 return
-            image = Image.open(io.BytesIO(resp.content))
-            image.thumbnail((round(30 * ui_scale), round(30 * ui_scale)), Image.Resampling.LANCZOS)
+            image = fit_cover_image(Image.open(io.BytesIO(resp.content)), preview_cover_size)
             ui_call(apply_tree_icon, item_id, image)
         except Exception as e:
             print_error(e)
@@ -1430,26 +1447,50 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
             return
 
         path_names = tree_item_paths[item_id]
-        text = path_names[-1]
-        if len(path_names) > 1:
-            text += f"\n分类：{' › '.join(path_names[:-1])}"
-
         tooltip_window = tk.Toplevel(root)
         tooltip_window.overrideredirect(True)
-        label = tk.Label(
+        tooltip_body = tk.Frame(
             tooltip_window,
-            text=text,
-            justify="left",
-            wraplength=round(480 * ui_scale),
-            font="AppBodyFont",
             background=current_colors["surface"],
-            foreground=current_colors["fg"],
             relief="solid",
             borderwidth=1,
             padx=round(10 * ui_scale),
-            pady=round(7 * ui_scale),
+            pady=round(9 * ui_scale),
         )
-        label.pack()
+        tooltip_body.pack()
+
+        preview_image = tree_preview_images.get(item_id)
+        if preview_image:
+            tk.Label(
+                tooltip_body,
+                image=preview_image,
+                background=current_colors["surface"],
+                borderwidth=0,
+            ).grid(row=0, column=0, rowspan=2, padx=(0, round(12 * ui_scale)))
+
+        text_column = 1 if preview_image else 0
+        tk.Label(
+            tooltip_body,
+            text=path_names[-1],
+            justify="left",
+            anchor="w",
+            wraplength=round(360 * ui_scale),
+            font="AppStrongFont",
+            background=current_colors["surface"],
+            foreground=current_colors["fg"],
+        ).grid(row=0, column=text_column, sticky="new")
+        if len(path_names) > 1:
+            tk.Label(
+                tooltip_body,
+                text=" › ".join(path_names[:-1]),
+                justify="left",
+                anchor="w",
+                wraplength=round(360 * ui_scale),
+                font="AppCaptionFont",
+                background=current_colors["surface"],
+                foreground=current_colors["muted"],
+            ).grid(row=1, column=text_column, sticky="sew", pady=(round(8 * ui_scale), 0))
+
         tooltip_window.update_idletasks()
         x = min(x_root + round(12 * ui_scale), root.winfo_screenwidth() - tooltip_window.winfo_reqwidth())
         y = min(y_root + round(18 * ui_scale), root.winfo_screenheight() - tooltip_window.winfo_reqheight())

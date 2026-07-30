@@ -1,6 +1,8 @@
 import unittest
 
-from src.tchmaterial_parser import count_resource_items, filter_resource_items
+from PIL import Image
+
+from src.tchmaterial_parser import count_resource_items, filter_resource_items, fit_cover_image
 
 
 RESOURCE_ITEMS = {
@@ -64,6 +66,16 @@ class ResourceSearchTest(unittest.TestCase):
 
     def test_unknown_keyword_returns_an_empty_tree(self) -> None:
         self.assertEqual(filter_resource_items(RESOURCE_ITEMS, "不存在"), {})
+
+
+class CoverImageTest(unittest.TestCase):
+    def test_centers_portrait_cover_on_fixed_canvas(self) -> None:
+        image = Image.new("RGB", (100, 200), "white")
+
+        result = fit_cover_image(image, (80, 80))
+
+        self.assertEqual(result.size, (80, 80))
+        self.assertEqual(result.getbbox(), (20, 0, 60, 80))
 
 
 if __name__ == "__main__":
