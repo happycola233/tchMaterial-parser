@@ -1,0 +1,181 @@
+# -*- coding: utf-8 -*-
+# 解析单个资源页面，获取资源标题、下载直链、文件格式与章节目录
+
+import re
+from urllib.parse import urlparse, parse_qs
+
+from .network import headers, session
+from .platform_utils import print_error
+
+def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] | None: # 解析资源，获取资源下载链接
+    try:
+        resources_info: list[tuple[str, str, str, list[dict]]] = []
+
+        # 1. 提取 URL 中的 contentId 与 contentType
+        content_id: str | None = None
+        content_type: str | None = None
+
+        params = parse_qs(urlparse(url, 'https').query)
+        if "contentId" in params:
+            content_id = params["contentId"][0]
+        else:
+            return None
+
+        if "contentType" in params:
+            content_type = params["contentType"][0]
+        else:
+            content_type = "assets_document"
+
+        # 2. 获取资源的信息
+        # 返回数据示例：
+        """
+        {
+            "id": "4f64356a-8df7-4579-9400-e32c9a7f6718",
+            // ...
+            "ti_items": [
+                {
+                    "ti_md5": "497110473b106d28651c41c14aa6d942",
+                    "ti_size": 13075391,
+                    "ti_storage": "cs_path:${ref-path}/edu_product/esp/assets/4f64356a-8df7-4579-9400-e32c9a7f6718.pkg/义务教育教科书 语文 八年级 上册_1756191813436.pdf", // 资源文件地址
+                    "ti_storages": [
+                        "https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/4f64356a-8df7-4579-9400-e32c9a7f6718.pkg/义务教育教科书 语文 八年级 上册_1756191813436.pdf",
+                        "https://r2-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/4f64356a-8df7-4579-9400-e32c9a7f6718.pkg/义务教育教科书 语文 八年级 上册_1756191813436.pdf",
+                        "https://r3-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/4f64356a-8df7-4579-9400-e32c9a7f6718.pkg/义务教育教科书 语文 八年级 上册_1756191813436.pdf"
+                    ],
+                    "ti_file_flag": "source",
+                    "ti_is_source_file": true,
+                    // ...
+                    "ti_format": "pdf",
+                    // ...
+                },
+                {
+                    // ...（和上一个元素组成一样）
+                }
+            ],
+            // ...
+            "title": "（根据2022年版课程标准修订）义务教育教科书·语文八年级上册",
+            // ...
+        }
+        """
+        # 其中 $.ti_items 的每一项对应一个资源
+
+        if re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对基础性作业的解析
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
+        else: # 对课本的解析
+            if content_type == "thematic_course": # 对专题课程（含电子课本、视频等）的解析
+                response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
+            else: # 对普通电子课本的解析
+                response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
+
+        data: dict = response.json()
+
+        # 3. 获取资源标题、下载链接及章节目录
+        def get_resource_info(resource_data) -> tuple[str, str, str, list[dict]] | None:
+            title: str = resource_data.get("title")
+            resource_url: str | None = None
+
+            for item in resource_data["ti_items"]: # 寻找存有资源链接列表的项
+                if item["ti_is_source_file"]: # 获取并构造资源的 URL
+                    resource_url = item.get("ti_storage")
+                    if resource_url:
+                        resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
+                    else:
+                        resource_url = next((url for url in item["ti_storages"] if url), None)
+                        if not resource_url:
+                            continue
+                    format: str = item.get("ti_format") or "pdf"
+                    if format == "folder":
+                       continue
+                    break
+
+            if not resource_url:
+                return None
+
+            # 通过 ebook_mapping + tree 接口组合获取章节目录
+            chapters: list[dict] = []
+            if bookmarks:
+                try:
+                    mapping_url: str | None = None
+                    for item in resource_data["ti_items"]:
+                        if item["ti_file_flag"] == "ebook_mapping":
+                            mapping_url = item.get("ti_storage") # 形如 https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/*.pkg/ebook_mapping.txt
+                            if mapping_url:
+                                mapping_url = mapping_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
+                            else:
+                                mapping_url = next((url for url in item["ti_storages"] if url), None)
+                            break
+
+                    if mapping_url:
+                        # a. 下载 mapping 文件获取页码和 ebook_id
+                        map_resp = session.get(mapping_url)
+                        map_data: dict = map_resp.json()
+                        ebook_id: str = map_data.get("ebook_id")
+
+                        # 构建 node_id 到 page_number 的映射字典
+                        # 格式: [{ "node_id": "...", "page_number": 1 }, ...]
+                        page_map: list[dict] = []
+                        if map_data.get("mappings"):
+                            for m in map_data["mappings"]:
+                                page_map.append({"node_id": m["node_id"], "page_number": m.get("page_number", 1) })
+
+                        # b. 如果有 ebook_id，在课程接口下载完整的目录树（tree API）
+                        if ebook_id:
+                            tree_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/national_lesson/trees/{ebook_id}.json", headers=headers)
+                            tree_data: list[dict] | dict = tree_resp.json()
+
+                            # 递归函数：合并 tree 的标题和 mapping 的页码
+                            def process_tree_nodes(nodes: list[dict]) -> list[dict]:
+                                result: list[dict] = []
+                                for node in nodes:
+                                    # 从 page_map 中找页码，找不到为 None
+                                    page_num: int = next((m["page_number"] for m in page_map if m["node_id"] == node["id"]), None)
+                                    chapter_item = {
+                                        "title": node["title"],
+                                        "page_index": page_num
+                                    }
+
+                                    # 如果有子节点，递归处理
+                                    if node.get("child_nodes"):
+                                        chapter_item["children"] = process_tree_nodes(node["child_nodes"])
+
+                                    result.append(chapter_item)
+                                return result
+
+                            # 开始解析
+                            if isinstance(tree_data, list):
+                                chapters = process_tree_nodes(tree_data)
+                            elif isinstance(tree_data, dict) and tree_data.get("child_nodes"):
+                                chapters = process_tree_nodes(tree_data["child_nodes"])
+
+                        # c. 兜底方案：如果获取 tree 失败，仅使用 mapping 生成纯页码索引
+                        if not chapters:
+                            page_map.sort(key=lambda x: x["page_number"])
+                            for i, m in enumerate(page_map):
+                                chapters.append({
+                                    "title": f"第 {i+1} 节 (P{m['page_number']})",
+                                    "page_index": m["page_number"]
+                                })
+
+                except Exception as e:
+                    print_error(e)
+                    chapters = []
+
+            return title, resource_url, format, chapters
+
+        resource_info = get_resource_info(data)
+        if resource_info:
+            resources_info.append(resource_info)
+
+        if content_type == "thematic_course": # 专题课程
+            resources_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/thematic_course/{content_id}/resources/list.json")
+            resources_data: list[dict] = resources_resp.json()
+            for resource in resources_data:
+                resource_info = get_resource_info(resource)
+                if resource_info:
+                    resources_info.append(resource_info)
+
+        return resources_info
+
+    except Exception as e:
+        print_error(e)
+        return None

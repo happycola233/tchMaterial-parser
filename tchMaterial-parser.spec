@@ -12,8 +12,10 @@ data_files = collect_data_files('sv_ttk') + [
 ]
 
 a = Analysis(
-    ['src/tchmaterial_parser.py'],
-    pathex=[],
+    # 入口位于包外：PyInstaller 会把入口脚本当作 __main__ 分析，包内脚本的相对导入在此情形下不成立。
+    # pathex 指向 src/，使入口里的 import tchmaterial_parser 能被解析到
+    ['src/main.py'],
+    pathex=['src'],
     binaries=[],
     datas=data_files,
     hiddenimports=[],

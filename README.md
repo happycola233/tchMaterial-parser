@@ -60,7 +60,7 @@ yay -S tchmaterial-parser
 git clone https://github.com/happycola233/tchMaterial-parser.git
 cd tchMaterial-parser
 pip install -r requirements.txt
-python src/tchmaterial_parser.py
+python src/main.py
 ```
 
 > [!NOTE]

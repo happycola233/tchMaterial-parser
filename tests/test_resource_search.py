@@ -2,7 +2,8 @@ import unittest
 
 from PIL import Image
 
-from src.tchmaterial_parser import count_resource_items, filter_resource_items, fit_cover_image
+from src.tchmaterial_parser.catalog import count_resource_items, filter_resource_items
+from src.tchmaterial_parser.images import fit_cover_image
 
 
 RESOURCE_ITEMS = {
