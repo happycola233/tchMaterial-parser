@@ -52,7 +52,7 @@ if is_mac:
     app = BUNDLE(
         coll,
         name='tchMaterial-parser.app',
-        icon='src/logo.icns',
+        icon='assets/logo.icns',
         bundle_identifier=None,
     )
 
@@ -76,6 +76,6 @@ else:
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
-        version='version.txt',
-        icon=['src/favicon_48x48.ico'],
+        version='version_info.txt',
+        icon=['assets/icon.ico'],
     )
