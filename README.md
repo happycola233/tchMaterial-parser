@@ -8,14 +8,17 @@
 
 ## ✨ 工具特点
 
-- 📚**支持批量下载**：一次输入多个电子课本预览页面网址，即可批量下载 PDF 课本文件。
-- 📂**自动命名文件**：工具会自动使用电子课本的名称作为默认文件名，方便管理下载的课本文件。
-- 🔖**自动添加书签**：若勾选了 “添加书签” 选项，则会在下载完成后为电子课本添加书签，在查看 PDF 时可更方便地跳转到指定位置。
-- 🔑**支持 Access Token**：支持用户[手动输入 Access Token](#2--设置-access-token可选) 并自动保存，下次启动可自动加载。
-- 🖥️**高 DPI 适配**：优化 UI 以适配高分辨率屏幕，避免界面模糊问题。
-- 💻**跨平台支持**：支持 Windows、Linux、macOS 等操作系统（需要图形界面）。
+- 📚 **支持批量下载**：一次输入多个电子课本预览页面网址，即可批量下载 PDF 课本文件。
+- 📂 **自动命名文件**：工具会自动使用电子课本的名称作为默认文件名，方便管理下载的课本文件。
+- 🔖 **自动添加书签**：若勾选了 “添加书签” 选项，则会在下载完成后为电子课本添加书签，在查看 PDF 时可更方便地跳转到指定位置。
+- 🔑 **支持 Access Token**：支持用户[手动输入 Access Token](#2--设置-access-token可选) 并自动保存，下次启动可自动加载。
+- 🖥️ **高 DPI 适配**：优化 UI 以适配高分辨率屏幕，避免界面模糊问题。
+- 🌗 **深色模式**：启动时自动跟随系统的浅色/深色模式，也可点击右上角的按钮手动切换，切换结果会被记住。
+- 💻 **跨平台支持**：支持 Windows、Linux、macOS 等操作系统（需要图形界面）。
 
-![工具截图](./docs/images/main.png)
+| 浅色模式 | 深色模式 |
+| :-: | :-: |
+| ![浅色模式下的工具截图](./docs/images/main.png) | ![深色模式下的工具截图](./docs/images/main_dark.png) |
 
 ## 📥 下载与安装方法
 
@@ -61,6 +64,8 @@ python src/tchmaterial_parser.py
 
 > [!NOTE]
 > 本工具使用 Tkinter 构建图形界面。Windows 与 macOS 的官方 Python 通常已自带，而部分 Linux 发行版需要单独安装，例如在 Debian/Ubuntu 上执行 `sudo apt install python3-tk`。
+>
+> 此外，精简安装的 Linux 系统可能缺少中文字体与 Emoji 字体，界面上会出现方块。可按需安装，例如在 Debian/Ubuntu 上执行 `sudo apt install fonts-noto-cjk fonts-noto-color-emoji`。
 
 若您想自行打包为可执行文件，可以在安装 `pyinstaller` 后执行：
 
@@ -143,19 +148,19 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 - **确认网络连接是否正常**🌐，有时网络不稳定可能导致下载失败。
 - **确保输入的网址有效**🔗，部分旧资源可能已被移除。
 
-### 2. 💾Access Token 保存在哪里？
+### 2. 💾 Access Token 保存在哪里？
 
 - **Windows**：Token 会存储在**注册表** `HKEY_CURRENT_USER\Software\tchMaterial-parser` 项中的 `AccessToken` 值。
 - **Linux**: Token 会存储在**文件** `~/.config/tchMaterial-parser/data.json` 中。
 - **macOS**：Token 会存储在**文件** `~/Library/Application Support/tchMaterial-parser/data.json` 中。
-- **其他操作系统**：Token 仅在运行时临时存储于内存，不会自动保存，程序重启后需重新输入，目前我们正在努力改进该功能。
+- **其他操作系统**：目前不受支持。
 
-### 3. 🔐Token 会不会泄露？
+### 3. 🔐 Token 会不会泄露？
 
 - 本工具**不会上传** Token，也不会存储在云端，仅用于本地请求授权。
 - **请勿在公开场合分享 Token**，以免您的账号被他人使用，造成严重后果。
 
-## ⭐Star History
+## ⭐ Star History
 
 <a href="https://www.star-history.com/?repos=happycola233%2FtchMaterial-parser&type=date&legend=top-left">
  <picture>

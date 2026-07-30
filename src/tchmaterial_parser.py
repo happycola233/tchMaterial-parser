@@ -9,16 +9,25 @@ VERSION = "v4.0"
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import tkinter.font as tkfont
-import os, sys, platform, traceback, io
-import threading, psutil, tempfile, pyperclip
-import base64, json, re, requests
+import os, sys, platform, traceback, io, subprocess
+import threading, psutil, pyperclip
+import json, math, re, requests
+from pathlib import Path
 from urllib.parse import urlparse, parse_qs
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 from pypdf import PdfReader, PdfWriter
+import sv_ttk # Sun Valley（Windows 11 风格）主题
 
 def print_error(e: Exception) -> None: # 打印错误信息到控制台
     if sys.stderr: # 无控制台运行时 sys.stderr 可能为 None
         traceback.print_exception(e)
+
+def resource_path(*parts: str) -> Path: # 获取源码或 PyInstaller 打包后的只读资源路径
+    # 源码入口位于 src/，资源位于项目根目录；PyInstaller 则把 datas 放到 sys._MEIPASS。
+    # 因此不能依赖当前工作目录或可执行文件所在目录，后者在单文件模式下并非资源的实际位置
+    source_root = Path(__file__).resolve().parent.parent
+    bundle_root = Path(getattr(sys, "_MEIPASS", source_root))
+    return bundle_root.joinpath(*parts)
 
 os_name = platform.system() # 获取操作系统类型
 if os_name == "Windows": # 在 Windows 操作系统下，导入 Windows 相关库
@@ -29,6 +38,127 @@ if os_name == "Windows": # 在 Windows 操作系统下，导入 Windows 相关�
         win32print = win32gui = win32con = win32api = ctypes = winreg = None
 else:
     win32print = win32gui = win32con = win32api = ctypes = winreg = None
+
+def color_emoji_font_paths() -> list[Path]: # 获取当前系统可能存在的彩色 Emoji 字体
+    candidates: list[Path] = []
+
+    if os_name == "Windows":
+        windows_dir = Path(os.environ.get("WINDIR") or os.environ.get("SystemRoot") or "C:/Windows")
+        candidates.append(windows_dir / "Fonts" / "seguiemj.ttf") # Segoe UI Emoji
+    elif os_name == "Darwin":
+        candidates.extend([
+            Path("/System/Library/Fonts/Apple Color Emoji.ttc"),
+            Path("/System/Library/Fonts/Apple Color Emoji.ttf"),
+            Path("/Library/Fonts/Apple Color Emoji.ttc"),
+        ])
+    elif os_name == "Linux":
+        # 各发行版安装 Noto Color Emoji 的目录并不统一，先询问 fontconfig，再检查常见路径
+        try:
+            result = subprocess.run(
+                ["fc-match", "-f", "%{file}\n", "Noto Color Emoji"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                candidates.append(Path(result.stdout.splitlines()[0].strip()))
+        except (FileNotFoundError, subprocess.SubprocessError):
+            pass
+        candidates.extend([
+            Path("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"),
+            Path("/usr/share/fonts/noto/NotoColorEmoji.ttf"),
+            Path("/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf"),
+            Path.home() / ".local" / "share" / "fonts" / "NotoColorEmoji.ttf",
+            Path.home() / ".fonts" / "NotoColorEmoji.ttf",
+        ])
+
+    # 去重并忽略不存在的候选项；找不到系统 Emoji 字体时由调用方决定如何显示原字符
+    unique_paths: list[Path] = []
+    for path in candidates:
+        if path.is_file() and path not in unique_paths:
+            unique_paths.append(path)
+    return unique_paths
+
+def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # 将系统 Emoji 字体中的原始字形渲染为透明背景图像
+    # 彩色 Emoji 字体可能是可缩放的 COLR，也可能只有固定字号的 CBDT/SBIX 位图，
+    # 因此依次尝试当前 DPI 所需字号及常见的位图 strike 尺寸
+    font_sizes = list(dict.fromkeys([max(icon_size * 4, 64), 160, 128, 109, 96, 64, 48, 32]))
+
+    for font_path in color_emoji_font_paths():
+        for font_size in font_sizes:
+            try:
+                font = ImageFont.truetype(str(font_path), font_size)
+                measuring_image = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+                measuring_draw = ImageDraw.Draw(measuring_image)
+                bounds = measuring_draw.textbbox((0, 0), symbol, font=font, embedded_color=True)
+                width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+                if width <= 0 or height <= 0:
+                    continue
+
+                padding = max(round(font_size * 0.08), 2)
+                rendered = Image.new("RGBA", (width + padding * 2, height + padding * 2), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(rendered)
+                draw.text(
+                    (padding - bounds[0], padding - bounds[1]),
+                    symbol,
+                    font=font,
+                    fill=(128, 128, 128, 255), # 仅供没有嵌入颜色层的字形使用；系统自带的彩色或灰白图层会保留原貌
+                    embedded_color=True,
+                )
+                content_bounds = rendered.getbbox()
+                if not content_bounds:
+                    continue
+                rendered = rendered.crop(content_bounds)
+
+                fit_size = max(icon_size - 2, 1)
+                scale = min(fit_size / rendered.width, fit_size / rendered.height)
+                resized = rendered.resize(
+                    (max(round(rendered.width * scale), 1), max(round(rendered.height * scale), 1)),
+                    Image.Resampling.LANCZOS,
+                )
+                icon = Image.new("RGBA", (icon_size, icon_size), (0, 0, 0, 0))
+                icon.alpha_composite(resized, ((icon_size - resized.width) // 2, (icon_size - resized.height) // 2))
+                return icon
+            except (OSError, ValueError):
+                continue
+    return None
+
+def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: # 绘制无须系统字体的月亮或太阳图标
+    # 先以 4 倍尺寸绘制再缩小，使曲线和斜线在高 DPI 与普通屏幕上都保持平滑
+    draw_scale = icon_size / 4
+    icon = Image.new("RGBA", (icon_size * 4, icon_size * 4), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(icon)
+
+    if target_theme == "dark": # 蓝色月牙表示点击后切换到深色模式
+        draw.ellipse(
+            (round(2.2 * draw_scale), round(1.4 * draw_scale), round(13.6 * draw_scale), round(14.6 * draw_scale)),
+            fill="#5b8def",
+        )
+        draw.ellipse(
+            (round(5.4 * draw_scale), round(0.4 * draw_scale), round(15.2 * draw_scale), round(11.8 * draw_scale)),
+            fill=(0, 0, 0, 0),
+        )
+    else: # 暖黄色太阳表示点击后切换到浅色模式
+        center = 8 * draw_scale
+        ray_inner = 5.3 * draw_scale
+        ray_outer = 7.2 * draw_scale
+        ray_width = max(round(1.25 * draw_scale), 1)
+        for angle in range(0, 360, 45):
+            radians = math.radians(angle)
+            start = (center + math.cos(radians) * ray_inner, center + math.sin(radians) * ray_inner)
+            end = (center + math.cos(radians) * ray_outer, center + math.sin(radians) * ray_outer)
+            draw.line((start, end), fill="#f0b429", width=ray_width)
+        radius = 3.2 * draw_scale
+        draw.ellipse((center - radius, center - radius, center + radius, center + radius), fill="#f0b429")
+
+    return icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+
+def make_theme_icon_image(target_theme: str, icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用几何图标
+    symbol = "🌙" if target_theme == "dark" else "☀️"
+    emoji_icon = render_system_emoji(symbol, icon_size)
+    if emoji_icon is not None:
+        return emoji_icon
+    return draw_theme_icon_fallback(target_theme, icon_size)
 
 def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] | None: # 解析资源，获取资源下载链接
     try:
@@ -396,16 +526,21 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_window.bind("<Escape>", lambda event: token_window.destroy()) # 绑定 Esc 键关闭窗口
 
     # 设置一个 Frame 用于留白，使布局更美观
-    frame = ttk.Frame(token_window, padding=20)
+    frame = ttk.Frame(token_window, padding=round(20 * ui_scale))
     frame.pack(fill="both", expand=True)
 
     # 提示文本
-    label = ttk.Label(frame, text="请粘贴从浏览器获取的 Access Token：", font=(ui_font_family, 10))
-    label.pack(pady=5)
+    label = ttk.Label(frame, text="请粘贴从浏览器获取的 Access Token", style="Heading.TLabel")
+    label.pack(anchor="w")
+    hint_label = ttk.Label(frame, text="需要先在国家中小学智慧教育平台登录账号，该凭据仅保存在本机。", style="Caption.TLabel")
+    hint_label.pack(anchor="w", pady=(round(2 * ui_scale), round(10 * ui_scale)))
 
-    # 创建多行 Text
-    token_text = tk.Text(frame, width=50, height=4, wrap="word", undo=True, font=(ui_font_family, 9), relief="solid")
-    token_text.pack(pady=5)
+    # 创建多行 Text（外面套一层卡片，以获得与其他控件一致的圆角边框）
+    token_card = make_card(frame)
+    token_card.pack(fill="both", expand=True)
+    token_text = tk.Text(token_card, width=50, height=4, wrap="char", undo=True, font="AppBodyFont")
+    token_text.pack(fill="both", expand=True)
+    register_themed_widget(token_text)
     bind_context_menu(token_text)
     bind_tab_navigation(token_text)
     token_text.focus()
@@ -430,9 +565,6 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         messagebox.showinfo("保存成功", tip_info)
         token_window.destroy()
 
-    save_btn = ttk.Button(frame, text="保存", command=save_token)
-    save_btn.pack(pady=5)
-
     # 帮助按钮
     def show_token_help():
         help_win = tk.Toplevel(token_window)
@@ -442,7 +574,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         help_win.grab_set() # 阻止主窗口操作
         help_win.bind("<Escape>", lambda event: help_win.destroy()) # 绑定 Esc 键关闭窗口
 
-        help_frame = ttk.Frame(help_win, padding=20)
+        help_frame = ttk.Frame(help_win, padding=round(20 * ui_scale))
         help_frame.pack(fill="both", expand=True)
 
         help_text = """\
@@ -466,14 +598,18 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
 ---------------------------------------------------------
 然后在控制台输出中即可看到 Access Token。将其复制后粘贴到本程序中。"""
 
-        # 只读文本区，支持选择复制
-        txt = tk.Text(help_frame, wrap="word", font=(ui_font_family, 9), relief="solid")
+        # 只读文本区，支持选择复制（外面套一层卡片，以获得与其他控件一致的圆角边框）
+        help_card = make_card(help_frame)
+        help_card.pack(fill="both", expand=True)
+        txt = tk.Text(help_card, width=64, height=24, wrap="word", font="AppCaptionFont", padx=round(4 * ui_scale), pady=round(4 * ui_scale))
         txt.insert("1.0", help_text)
         txt.config(state="disabled")
         txt.pack(fill="both", expand=True)
+        register_themed_widget(txt)
 
         # 同样可给帮助文本区绑定右键菜单
         help_menu = tk.Menu(txt, tearoff=0)
+        register_themed_widget(help_menu)
         help_menu.add_command(label="复制 (C)", underline=4, accelerator="Ctrl+C", command=lambda: txt.event_generate("<<Copy>>"))
         help_menu.add_command(label="全选 (A)", underline=4, accelerator="Ctrl+A", command=lambda: txt.event_generate("<<SelectAll>>"))
 
@@ -489,115 +625,104 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
             txt.bind("<Button-2>", show_help_menu)
 
         center_window(help_win, token_window) # 让帮助弹窗居中
+        apply_titlebar_theme(help_win) # 让标题栏跟随主题
         help_win.lift() # 置顶可见
 
-    help_btn = ttk.Button(frame, text="如何获取？", command=show_token_help)
-    help_btn.pack(pady=5)
+    # 底部按钮栏：左侧为帮助按钮，右侧为保存按钮
+    button_frame = ttk.Frame(frame)
+    button_frame.pack(fill="x", pady=(round(12 * ui_scale), 0))
+    help_btn = ttk.Button(button_frame, text="如何获取？", command=show_token_help)
+    help_btn.pack(side="left")
+    save_btn = ttk.Button(button_frame, text="保存", style=ACCENT_BUTTON_STYLE, command=save_token)
+    save_btn.pack(side="right")
 
     center_window(token_window, root) # 让弹窗居中
+    apply_titlebar_theme(token_window) # 让标题栏跟随主题
     token_window.lift() # 置顶可见
 
-def load_access_token() -> None: # 读取本地存储的 Access Token
+REGISTRY_PATH = "Software\\tchMaterial-parser" # Windows 下存放配置的注册表键
+CONFIG_KEYS = { "access_token": "AccessToken", "theme": "Theme" } # 配置项名称到注册表值名称的映射（JSON 文件直接使用配置项名称）
+
+def config_file_path() -> str: # 获取配置文件路径（非 Windows 平台）
+    if os_name == "Linux": # 在 Linux 上，配置存放于 ~/.config/tchMaterial-parser/data.json
+        return os.path.join(os.path.expanduser("~"), ".config", "tchMaterial-parser", "data.json") # os.path.expanduser("~") 为当前用户主目录
+    if os_name == "Darwin": # 在 macOS 上，配置存放于 ~/Library/Application Support/tchMaterial-parser/data.json
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "tchMaterial-parser", "data.json")
+    raise RuntimeError(f"不支持的操作系统：{os_name}")
+
+def config_location() -> str: # 获取配置存放位置的描述文本，用于提示用户
+    if os_name == "Windows":
+        return f"注册表：HKEY_CURRENT_USER\\{REGISTRY_PATH}"
+    if os_name == "Linux":
+        return "文件：~/.config/tchMaterial-parser/data.json"
+    if os_name == "Darwin":
+        return "文件：~/Library/Application Support/tchMaterial-parser/data.json"
+    raise RuntimeError(f"不支持的操作系统：{os_name}")
+
+def load_config() -> dict[str, str]: # 读取本地存储的配置
+    config: dict[str, str] = {}
+
+    if os_name == "Windows": # 在 Windows 上，从注册表读取
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, 0, winreg.KEY_READ) as key:
+                for name, value_name in CONFIG_KEYS.items():
+                    try:
+                        value, _ = winreg.QueryValueEx(key, value_name)
+                    except FileNotFoundError: # 该配置项尚未写入
+                        continue
+                    if not isinstance(value, str):
+                        raise TypeError(f"配置项 {name} 必须是字符串")
+                    config[name] = value
+        except FileNotFoundError: # 注册表键不存在，即从未保存过配置
+            return config
+        return config
+
+    target_file = config_file_path() # 在其他平台上，从 JSON 文件读取
+    if not os.path.exists(target_file): # 文件不存在表示尚未保存过配置
+        return config
+    with open(target_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise TypeError("配置文件的根节点必须是对象")
+    for name in CONFIG_KEYS:
+        if name not in data:
+            continue
+        value = data[name]
+        if not isinstance(value, str):
+            raise TypeError(f"配置项 {name} 必须是字符串")
+        config[name] = value
+    return config
+
+def save_config(**updates: str) -> None: # 保存配置，并与已有配置合并
+    if os_name == "Windows": # 在 Windows 上，写入注册表
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_PATH) as key:
+            for name, value in updates.items():
+                winreg.SetValueEx(key, CONFIG_KEYS[name], 0, winreg.REG_SZ, value)
+        return
+
+    target_file = config_file_path() # 在其他平台上，写入 JSON 文件
+    data = load_config() # 先读取已有配置，避免覆盖其他配置项
+    data.update(updates)
+    os.makedirs(os.path.dirname(target_file), exist_ok=True)
+    with open(target_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+def load_access_token(config: dict[str, str]) -> None: # 从已读取的配置中加载 Access Token
     global access_token
-    try:
-        token = None
 
-        if os_name == "Windows": # 在 Windows 上，从注册表读取
-            if not winreg:
-                return
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser", 0, winreg.KEY_READ) as key:
-                token, _ = winreg.QueryValueEx(key, "AccessToken")
-        elif os_name == "Linux": # 在 Linux 上，从 ~/.config/tchMaterial-parser/data.json 文件读取
-            # 构建文件路径
-            target_file = os.path.join(
-                os.path.expanduser("~"), # 获取当前用户主目录
-                ".config",
-                "tchMaterial-parser",
-                "data.json"
-            )
-            if not os.path.exists(target_file): # 文件不存在则不做处理
-                return
-
-            # 读取 JSON 文件
-            with open(target_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            # 提取 access_token 字段
-            token = data["access_token"]
-        elif os_name == "Darwin": # 在 macOS 上，从 ~/Library/Application Support/tchMaterial-parser/data.json 文件读取
-            target_file = os.path.join(
-                os.path.expanduser("~"),
-                "Library",
-                "Application Support",
-                "tchMaterial-parser",
-                "data.json"
-            )
-            if not os.path.exists(target_file):
-                return
-
-            with open(target_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            token = data["access_token"]
-
-        if token and isinstance(token, str):
-            access_token = token
-            headers["Authorization"] = f"Bearer {access_token}"
-            headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
-
-    except Exception as e:
-        print_error(e)
+    token = config.get("access_token")
+    if token:
+        access_token = token
+        headers["Authorization"] = f"Bearer {access_token}"
+        headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
 
 def set_access_token(token: str) -> str: # 设置并更新 Access Token
     global access_token
+    save_config(access_token=token)
     access_token = token
     headers["Authorization"] = f"Bearer {access_token or '0'}"
-    headers["X-ND-AUTH"] = f'MAC id="{access_token or '0'}",nonce="0",mac="0"'
-
-    try:
-        if os_name == "Windows": # 在 Windows 上，将 Access Token 写入注册表
-            if not winreg:
-                return "Access Token 已保存！"
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\tchMaterial-parser") as key:
-                winreg.SetValueEx(key, "AccessToken", 0, winreg.REG_SZ, token)
-            return "Access Token 已保存！\n已写入注册表：HKEY_CURRENT_USER\\Software\\tchMaterial-parser\\AccessToken"
-        elif os_name == "Linux": # 在 Linux 上，将 Access Token 保存至 ~/.config/tchMaterial-parser/data.json 文件中
-            # 构建目标目录和文件路径
-            target_dir = os.path.join(
-                os.path.expanduser("~"),
-                ".config",
-                "tchMaterial-parser"
-            )
-            target_file = os.path.join(target_dir, "data.json")
-            # 创建目录（如果不存在）
-            os.makedirs(target_dir, exist_ok=True)
-
-            # 构建要保存的数据字典
-            data = { "access_token": token }
-            # 写入 JSON 文件
-            with open(target_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-
-            return "Access Token 已保存！\n已写入文件：~/.config/tchMaterial-parser/data.json"
-        elif os_name == "Darwin": # 在 macOS 上，将 Access Token 保存至 ~/Library/Application Support/tchMaterial-parser/data.json 文件中
-            target_dir = os.path.join(
-                os.path.expanduser("~"),
-                "Library",
-                "Application Support",
-                "tchMaterial-parser"
-            )
-            target_file = os.path.join(target_dir, "data.json")
-            os.makedirs(target_dir, exist_ok=True)
-
-            data = { "access_token": token }
-            with open(target_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-
-            return "Access Token 已保存！\n已写入文件：~/Library/Application Support/tchMaterial-parser/data.json"
-        else:
-            return "Access Token 已保存！\n本工具尚未支持该操作系统下 Access Token 的持久化，下次启动时仍需手动输入 Access Token。"
-
-    except Exception as e:
-        print_error(e)
-        return "Access Token 已保存！\n因出现错误而无法持久化，下次启动时仍需手动输入 Access Token。"
+    headers["X-ND-AUTH"] = f'MAC id="{access_token or "0"}",nonce="0",mac="0"'
+    return f"Access Token 已保存！\n已写入{config_location()}"
 
 class resource_helper: # 获取网站上资源的数据
     def parse_hierarchy(self, hierarchy: list) -> dict: # 解析层级数据
@@ -718,8 +843,104 @@ def pick_ui_font_family() -> str: # 选择一个合适的字体
     except Exception:
         return "TkDefaultFont"
 
+def setup_fonts() -> None: # 创建（或更新）所有命名字体，使其使用中文字体并跟随缩放因子
+    # 此处直接调用 Tcl 命令而不使用 tkinter.font.Font，因为后者创建的字体会随 Python 对象被垃圾回收而一并删除
+    existing_fonts: tuple[str, ...] = root.tk.splitlist(root.tk.call("font", "names"))
+    for name, (size, bold) in { **APP_FONTS, **SV_FONTS }.items():
+        # 字号取负值表示以像素为单位，从而避开 tk scaling 的二次缩放，与 sv-ttk 的取值方式保持一致
+        options = ("-family", ui_font_family, "-size", -round(size * ui_scale), "-weight", "bold" if bold else "normal")
+        root.tk.call("font", "configure" if name in existing_fonts else "create", name, *options)
+
+def detect_system_theme() -> str: # 获取系统当前使用的是浅色还是深色模式
+    try:
+        if os_name == "Windows" and winreg: # 在 Windows 上，读取注册表中的个性化设置
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize") as key:
+                apps_use_light_theme, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return "light" if apps_use_light_theme else "dark"
+        elif os_name == "Darwin": # 在 macOS 上，读取全局偏好设置（仅深色模式下存在 AppleInterfaceStyle 项，其值为 Dark）
+            result = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"], capture_output=True, text=True, timeout=2)
+            return "dark" if result.stdout.strip() == "Dark" else "light"
+        elif os_name == "Linux": # 在 Linux 上，读取 GNOME 的配色方案设置（其值形如 'prefer-dark'）
+            try:
+                result = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"], capture_output=True, text=True, timeout=2)
+            except FileNotFoundError: # 非 GNOME 桌面环境多半没有 gsettings，此时无从判断，按浅色处理
+                return "light"
+            return "dark" if "dark" in result.stdout.lower() else "light"
+    except Exception as e:
+        print_error(e)
+
+    return "light" # 其余情况一律视为浅色模式
+
+def apply_titlebar_theme(window: tk.Tk | tk.Toplevel) -> None: # 在 Windows 上让窗口标题栏跟随深色模式
+    # macOS 与 Linux 的标题栏由系统或窗口管理器绘制，没有对应的接口可供单独设置，
+    # 因此在这两个平台上，手动切换主题后标题栏仍会保持系统的深浅色，只有窗口内部会随之改变
+    if os_name != "Windows" or not ctypes:
+        return
+
+    try:
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id()) # Tk 窗口的父窗口才是带标题栏的那个窗口
+        value = ctypes.c_int(1 if current_theme == "dark" else 0)
+        for attribute in (20, 19): # DWMWA_USE_IMMERSIVE_DARK_MODE，20 适用于 Windows 10 20H1 及更新版本，19 适用于更早的版本
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)) == 0:
+                break
+
+        if window.winfo_viewable(): # 让窗口宽度增减 1 像素，以强制标题栏重绘，否则切换主题后标题栏不会立即更新
+            width, height = window.winfo_width(), window.winfo_height()
+            window.geometry(f"{width + 1}x{height}")
+            window.update_idletasks()
+            window.geometry(f"{width}x{height}")
+
+    except Exception as e:
+        print_error(e)
+
+def register_themed_widget(widget: tk.Widget) -> None: # 登记需要跟随主题手动调整配色的 tk 原生控件（ttk 控件由主题自动处理），并立即应用当前配色
+    themed_widgets.add(widget)
+    widget.bind("<Destroy>", lambda _event: themed_widgets.discard(widget), add="+")
+    apply_widget_theme(widget)
+
+def apply_widget_theme(widget: tk.Widget) -> None: # 为单个 tk 原生控件应用当前主题配色
+    if isinstance(widget, tk.Menu):
+        widget.configure(background=current_colors["surface"], foreground=current_colors["fg"], activebackground=current_colors["selbg"], activeforeground=current_colors["selfg"], activeborderwidth=0, borderwidth=0, relief="flat")
+    else: # tk.Text
+        widget.configure(background=current_colors["surface"], foreground=current_colors["fg"], insertbackground=current_colors["fg"], selectbackground=current_colors["selbg"], selectforeground=current_colors["selfg"], borderwidth=0, relief="flat", highlightthickness=0)
+
+def apply_theme(theme: str) -> None: # 应用浅色/深色主题
+    global current_theme, current_colors
+    current_theme = theme
+    current_colors = THEME_COLORS[current_theme]
+
+    sv_ttk.set_theme(current_theme, root)
+    # sv-ttk 把配色函数绑定在 <<ThemeChanged>> 事件上，但一来该事件不会送达尚无 ttk 子控件的根窗口（首次启动时配色不生效），
+    # 二来后面每次调用 ttk::style configure 都会重新触发该事件，从而把下面的自定义配色覆盖回去。因此解绑它，改为在此显式调用一次。
+    root.unbind_class("Tk", "<<ThemeChanged>>")
+    root.tk.call("configure_colors")
+
+    setup_fonts() # sv-ttk 会在首次加载主题时创建自己的命名字体，因此字体要在其之后设置
+    style = ttk.Style(root)
+
+    # 切换主题会重置以下自定义样式，因此每次应用主题时都要重新设置
+    style.configure(".", font="AppBodyFont", background=current_colors["page"])
+    style.configure("Title.TLabel", font="AppTitleFont")
+    style.configure("Heading.TLabel", font="AppStrongFont")
+    style.configure("Caption.TLabel", font="AppCaptionFont", foreground=current_colors["muted"])
+    style.configure("Description.TLabel", font="AppBodyFont", foreground=current_colors["muted"], background=current_colors["surface"]) # 该样式用于卡片内的文字，背景需与卡片一致
+    style.configure("Custom.Treeview", font="AppBodyFont", background=current_colors["surface"], rowheight=round(32 * ui_scale))
+    button_padding = (round(10 * ui_scale), round(4 * ui_scale)) # 增加纵向留白，使按钮在各 DPI 下保持接近 Win11 的紧凑比例
+    style.configure("TButton", padding=button_padding)
+    style.configure("Accent.TButton", padding=button_padding)
+
+    for widget in themed_widgets:
+        apply_widget_theme(widget)
+
+    apply_titlebar_theme(root)
+
+def make_card(parent: tk.Widget, **kwargs: dict) -> ttk.Frame: # 创建卡片式容器，用于给 tk 原生控件加上圆角边框
+    return ttk.Frame(parent, style="Card.TFrame", **kwargs)
+
 def bind_context_menu(parent: tk.Widget) -> None: # 创建右键菜单
-    context_menu = tk.Menu(root, tearoff=0)
+    context_menu = tk.Menu(parent, tearoff=0)
+    register_themed_widget(context_menu)
     context_menu.add_command(label="撤销 (U)", underline=4, accelerator="Ctrl+Z", command=lambda: parent.event_generate("<<Undo>>"))
     context_menu.add_separator()
     context_menu.add_command(label="剪切 (T)", underline=4, accelerator="Ctrl+X", command=lambda: parent.event_generate("<<Cut>>"))
@@ -774,21 +995,43 @@ access_token: str | None = None
 headers = { "Authorization": "Bearer 0", "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
 session.proxies = {} # 全局忽略代理
 
+ui_scale = 1.0 # 界面缩放因子，在 main() 中根据屏幕 DPI 计算
+current_theme = "light" # 当前主题
+current_colors: dict[str, str] = {} # 当前主题的配色，在 apply_theme() 中填充
+themed_widgets: set[tk.Widget] = set() # 当前仍存在且需要跟随主题调整配色的 tk 原生控件
 
-# 主界面上方的功能说明文字
-DESCRIPTION = """\
-📌 请在右侧的文本框中输入一个或多个资源页面的网址（每个网址一行）。
-🔗 资源页面网址示例：
-      https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=...
-📝 您也可以直接在左侧的列表中选择资源。
-📥 点击 “下载” 按钮后，程序会解析并下载资源。
-❗ 注：为了更可靠地下载，建议点击 “设置 Token” 按钮，参照里面的说明完成设置。"""
+# 主题配色。surface 为 sv-ttk 卡片贴图的填充色，须与之一致，否则卡片内会出现色差；
+# page 比 surface 略深，用作页面底色，让卡片、列表、文本框显出层次
+THEME_COLORS = {
+    "light": { "page": "#f2f2f2", "surface": "#fafafa", "fg": "#1c1c1c", "muted": "#5d5d5d", "selbg": "#2f60d8", "selfg": "#ffffff" },
+    "dark": { "page": "#141414", "surface": "#1c1c1c", "fg": "#fafafa", "muted": "#a0a0a0", "selbg": "#2f60d8", "selfg": "#ffffff" },
+}
+
+ACCENT_BUTTON_STYLE = "Accent.TButton"
+SWITCH_STYLE = "Switch.TCheckbutton"
+
+# 本程序使用的命名字体，格式为 字体名称: (基准字号（像素）, 是否加粗)
+APP_FONTS = { "AppCaptionFont": (12, False), "AppBodyFont": (14, False), "AppStrongFont": (14, True), "AppTitleFont": (20, True) }
+# sv-ttk 内置的命名字体，需要一并改为中文字体（其默认字体不含中文字形），基准字号与 sv-ttk 原始取值保持一致
+SV_FONTS = {
+    "SunValleyCaptionFont": (12, False), "SunValleyBodyFont": (14, False), "SunValleyBodyStrongFont": (14, True), "SunValleyBodyLargeFont": (18, False),
+    "SunValleySubtitleFont": (20, True), "SunValleyTitleFont": (28, True), "SunValleyTitleLargeFont": (40, True), "SunValleyDisplayFont": (68, True),
+}
+
+
+# 主界面上方的功能说明：Emoji 与正文分开渲染以保留系统字体的完整字形
+DESCRIPTION_ITEMS = (
+    ("📌", "在右侧的文本框中输入一个或多个资源页面的网址（每行一个），或直接在左侧的列表中选择资源。"),
+    ("🔗️", "网址示例：https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=..."),
+    ("📥", "点击 “下载” 解析并下载资源；点击 “解析并复制” 则只把资源的直链复制到剪贴板。"),
+    ("ℹ️", "为了更可靠地下载，建议先点击 “设置 Token”，参照里面的说明完成设置。"),
+)
 
 
 def main() -> None: # 程序入口：初始化界面并进入主循环
     # 下列变量在本函数中创建，但前面定义的函数会通过全局作用域访问它们，
     # 因此必须声明为 global，否则相关功能会在运行时抛出 NameError
-    global root, ui_font_family, url_text, bookmark_var
+    global root, ui_font_family, ui_scale, url_text, bookmark_var
     global download_btn, download_progress_bar, progress_label
 
     scale: float | None = None
@@ -803,8 +1046,9 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
         except Exception: # Windows 8 或更老
             ctypes.windll.user32.SetProcessDPIAware()
 
-    # 尝试加载已保存的 Access Token
-    load_access_token()
+    # 配置只读取一次，同时用于恢复 Access Token 与主题
+    saved_config = load_config()
+    load_access_token(saved_config)
 
     # 获取资源列表
     try:
@@ -825,21 +1069,26 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
         except Exception:
             scale = 1.0
     root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
+
+    # 界面元素的尺寸另算：Tk 在 macOS 上把屏幕 DPI 报成 72（即上面算出的 scale 为 0.75），
+    # 部分 X server 也是如此，若直接拿来乘字号会把界面缩小四分之一。macOS 会自行处理 Retina 缩放，故固定取 1
+    ui_scale = 1.0 if os_name == "Darwin" else max(scale, 1.0)
     root.title(f"国家中小学智慧教育平台 资源下载工具 {VERSION}") # 设置窗口标题
 
-    def set_icon() -> None: # 设置窗口图标
-        # 下面的 base64 字符串即 assets/window_icon.png 的内容（内嵌于此以避免打包时附带资源文件）
-        # 更换图标时需重新生成这段字符串，具体步骤见 assets/README.md
-        icon = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAN8AAADfCAYAAAEB/ja6AAAACXBIWXMAAAsTAAALEwEAmpwYAAAE7mlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgOS4xLWMwMDIgNzkuYTZhNjM5NiwgMjAyNC8wMy8xMi0wNzo0ODoyMyAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iIHhtbG5zOnN0RXZ0PSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VFdmVudCMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjkgKFdpbmRvd3MpIiB4bXA6Q3JlYXRlRGF0ZT0iMjAyNC0wOC0xOVQxNDozNzo1MyswODowMCIgeG1wOk1vZGlmeURhdGU9IjIwMjQtMDgtMTlUMTQ6Mzg6MjQrMDg6MDAiIHhtcDpNZXRhZGF0YURhdGU9IjIwMjQtMDgtMTlUMTQ6Mzg6MjQrMDg6MDAiIGRjOmZvcm1hdD0iaW1hZ2UvcG5nIiBwaG90b3Nob3A6Q29sb3JNb2RlPSIzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOmRjMWFiMTUxLTkzYzUtMGI0MS1hYWNiLTYxYzFhMmIyNTczOSIgeG1wTU06RG9jdW1lbnRJRD0i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")
-        icon_path = os.path.join(tempfile.gettempdir(), "icon.png")
-        with open(icon_path, "wb") as f:
-            f.write(icon)
+    # 应用主题：优先沿用用户上次手动切换的结果，否则跟随系统的浅色/深色模式
+    saved_theme = saved_config.get("theme")
+    apply_theme(saved_theme if saved_theme in THEME_COLORS else detect_system_theme())
 
-        icon = tk.PhotoImage(file=icon_path)
-        root.iconphoto(True, icon)
-        setattr(root, "_icon_ref", icon) # 为防止图片被垃圾回收，保存引用
+    def set_icon() -> Image.Image: # 设置窗口图标，并返回图标图像以供标题栏左侧的 logo 复用
+        # 源码运行时直接读取 assets 中的原图；打包后由 spec 的 datas 收集到相同的相对路径
+        with Image.open(resource_path("assets", "window_icon.png")) as icon:
+            icon_image = icon.copy()
+        photo = ImageTk.PhotoImage(icon_image)
+        root.iconphoto(True, photo)
+        setattr(root, "_icon_ref", photo) # 为防止图片被垃圾回收，保存引用
+        return icon_image
 
-    set_icon() # 设置窗口图标
+    icon_image = set_icon() # 设置窗口图标
 
     def on_closing() -> None: # 处理窗口关闭事件
         global app_closing
@@ -870,21 +1119,102 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     root.protocol("WM_DELETE_WINDOW", on_closing) # 注册窗口关闭事件的处理函数
 
     # 创建一个容器框架
-    container_frame = ttk.Frame(root)
-    container_frame.pack(anchor="center", expand=True, fill="both", padx=int(40 * scale), pady=int(20 * scale)) # 在容器的中心位置放置，允许组件在容器中扩展，水平外边距 40，垂直外边距 40
+    container_frame = ttk.Frame(root, padding=(round(24 * ui_scale), round(18 * ui_scale))) # 通过内边距在窗口四周留白
+    container_frame.pack(expand=True, fill="both")
 
-    title_label = ttk.Label(container_frame, text="国家中小学智慧教育平台 资源下载工具", font=(ui_font_family, 16, "bold")) # 添加标题标签
-    title_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
+    # 顶部：左侧为图标与标题，右侧为主题切换按钮
+    header_frame = ttk.Frame(container_frame)
+    header_frame.pack(fill="x")
 
-    description_label = ttk.Label(container_frame, text=DESCRIPTION, font=(ui_font_family, 9)) # 添加描述标签
-    description_label.pack(pady=int(5 * scale), anchor="w") # 设置垂直外边距（跟随缩放）
+    # 标题左侧的图标复用已经成功读取的窗口图标
+    logo_image = icon_image.copy()
+    logo_image.thumbnail((round(42 * ui_scale), round(42 * ui_scale)), Image.Resampling.LANCZOS)
+    logo_photo = ImageTk.PhotoImage(logo_image)
+    logo_label = ttk.Label(header_frame, image=logo_photo)
+    logo_label.pack(side="left", padx=(0, round(12 * ui_scale)))
+    setattr(logo_label, "_image_ref", logo_photo) # 为防止图片被垃圾回收，保存引用
 
-    paned = ttk.PanedWindow(container_frame, orient="horizontal") # 创建水平分割窗口
-    paned.pack(fill="both", expand=True)
-    treeview_pane = ttk.Frame(paned) # 创建树视图的子框架，放在分割窗口的左侧
+    title_frame = ttk.Frame(header_frame)
+    title_frame.pack(side="left")
+    title_label = ttk.Label(title_frame, text="国家中小学智慧教育平台 资源下载工具", style="Title.TLabel") # 添加标题标签
+    title_label.pack(anchor="w")
+    subtitle_label = ttk.Label(title_frame, text=f"{VERSION} · 批量下载 · PDF 书签 · 免费开源", style="Caption.TLabel") # 添加副标题标签
+    subtitle_label.pack(anchor="w")
+
+    theme_icons: dict[str, ImageTk.PhotoImage] = {} # 缓存两个主题图标，并同时防止 Tk 图片被垃圾回收
+
+    def update_theme_button() -> None: # 更新按钮文字与图标，使其表示点击后将切换到的主题
+        target_theme = "dark" if current_theme == "light" else "light"
+        if target_theme not in theme_icons:
+            icon_size = max(round(16 * ui_scale), 16)
+            theme_icons[target_theme] = ImageTk.PhotoImage(make_theme_icon_image(target_theme, icon_size))
+        theme_btn.config(
+            text=" 深色" if target_theme == "dark" else " 浅色",
+            image=theme_icons[target_theme],
+            compound="left",
+        )
+
+    def switch_theme() -> None: # 切换浅色/深色主题
+        target_theme = "light" if current_theme == "dark" else "dark"
+        save_config(theme=target_theme)
+        apply_theme(target_theme)
+        update_theme_button()
+
+    theme_btn = ttk.Button(header_frame, style="Toolbutton", command=switch_theme)
+    theme_btn.pack(side="right", anchor="n")
+    update_theme_button()
+
+    # 功能说明
+    description_padding = round(14 * ui_scale)
+    description_icon_gap = round(8 * ui_scale)
+    description_icon_size = max(round(18 * ui_scale), 18)
+    description_card = make_card(container_frame, padding=(description_padding, round(10 * ui_scale)))
+    description_card.pack(fill="x", pady=(round(14 * ui_scale), 0))
+    description_card.columnconfigure(1, weight=1)
+
+    description_icons: list[ImageTk.PhotoImage] = [] # 保存 Tk 图片引用，避免图标被垃圾回收
+    description_labels: list[ttk.Label] = []
+    for row, (symbol, text) in enumerate(DESCRIPTION_ITEMS):
+        row_padding = (0, round(1 * ui_scale)) if row < len(DESCRIPTION_ITEMS) - 1 else 0
+        emoji_image = render_system_emoji(symbol, description_icon_size)
+        if emoji_image is not None:
+            photo = ImageTk.PhotoImage(emoji_image)
+            description_icons.append(photo)
+            description_icon_label = ttk.Label(description_card, image=photo, style="Description.TLabel")
+        else: # Pillow 无法读取系统 Emoji 字体时，退回改版前由 Tk 直接显示字符的方式
+            description_icon_label = ttk.Label(description_card, text=symbol, style="Description.TLabel")
+        description_icon_label.grid(
+            row=row,
+            column=0,
+            sticky="n",
+            padx=(0, description_icon_gap),
+            pady=row_padding,
+        )
+        description_label = ttk.Label(
+            description_card,
+            text=text,
+            style="Description.TLabel",
+            justify="left",
+            anchor="w",
+            wraplength=round(760 * ui_scale),
+        )
+        description_label.grid(row=row, column=1, sticky="ew", pady=row_padding)
+        description_labels.append(description_label)
+
+    def on_description_resize(event: tk.Event) -> None: # 窗口宽度变化时，同步调整说明文字的折行宽度，避免文字被裁切
+        occupied_width = description_padding * 2 + description_icon_size + description_icon_gap + round(4 * ui_scale)
+        wraplength = max(event.width - occupied_width, round(220 * ui_scale))
+        for label in description_labels:
+            if int(label.cget("wraplength")) != wraplength:
+                label.config(wraplength=wraplength)
+
+    description_card.bind("<Configure>", on_description_resize)
+
+    paned = ttk.PanedWindow(container_frame, orient="horizontal") # 创建水平分割窗口（在底部各栏之后才打包，见文件末尾）
+    treeview_pane = ttk.Frame(paned, padding=(0, 0, round(8 * ui_scale), 0)) # 创建树视图的子框架，放在分割窗口的左侧（右侧留出与分割条之间的间距）
     treeview_pane.columnconfigure(0, weight=1)
     treeview_pane.rowconfigure(1, weight=1)
-    text_pane = ttk.Frame(paned) # 创建文本框的子框架，放在分割窗口的右侧
+    text_pane = ttk.Frame(paned, padding=(round(8 * ui_scale), 0, 0, 0)) # 创建文本框的子框架，放在分割窗口的右侧
     text_pane.columnconfigure(0, weight=1)
     text_pane.rowconfigure(1, weight=1)
     paned.add(treeview_pane)
@@ -892,11 +1222,9 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     paned.update_idletasks()
     root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%（不能使用 ui_call）
 
-    treeview_label = ttk.Label(treeview_pane, text="资源列表", font=(ui_font_family, 10, "bold")) # 添加树视图标签
-    treeview_label.grid(row=0, column=0, sticky="w")
-    style = ttk.Style(root)
-    style.configure("Custom.Treeview", rowheight=int(30 * scale), font=(ui_font_family, 9))
-    treeview = ttk.Treeview(treeview_pane, style="Custom.Treeview", show="tree", selectmode="browse") # 创建树视图，使用自定义样式，隐藏列标题，设置选择模式为单选
+    treeview_label = ttk.Label(treeview_pane, text="资源列表", style="Heading.TLabel") # 添加树视图标签
+    treeview_label.grid(row=0, column=0, sticky="w", pady=(0, round(6 * ui_scale)))
+    treeview = ttk.Treeview(treeview_pane, style="Custom.Treeview", show="tree", selectmode="browse", height=12) # 创建树视图，使用自定义样式（该样式在 apply_theme() 中配置），隐藏列标题，设置选择模式为单选
     treeview.grid(row=1, column=0, sticky="nsew")
     treeview_scrollbar = ttk.Scrollbar(treeview_pane, orient="vertical", command=treeview.yview)
     treeview.configure(yscrollcommand=lambda f, l: auto_hide_scrollbar(treeview_scrollbar, f, l))
@@ -906,10 +1234,13 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     # treeview.configure(xscrollcommand=lambda f, l: auto_hide_scrollbar(hsb, f, l))
     # hsb.grid(row=2, column=0, sticky="ew")
 
-    url_label = ttk.Label(text_pane, text="资源页面网址", font=(ui_font_family, 10, "bold")) # 添加 URL 标签
-    url_label.grid(row=0, column=0, sticky="w")
-    url_text = tk.Text(text_pane, wrap="word", undo=True, font=(ui_font_family, 9), relief="solid") # 添加 URL 输入框
-    url_text.grid(row=1, column=0, sticky="nsew")
+    url_label = ttk.Label(text_pane, text="资源页面网址", style="Heading.TLabel") # 添加 URL 标签
+    url_label.grid(row=0, column=0, sticky="w", pady=(0, round(6 * ui_scale)))
+    url_card = make_card(text_pane) # 外面套一层卡片，使输入框拥有与树视图一致的圆角边框
+    url_card.grid(row=1, column=0, sticky="nsew")
+    url_text = tk.Text(url_card, width=40, height=8, wrap="char", undo=True, font="AppBodyFont", padx=round(6 * ui_scale), pady=round(4 * ui_scale)) # 添加 URL 输入框
+    url_text.pack(fill="both", expand=True)
+    register_themed_widget(url_text) # 让输入框的配色跟随主题
     bind_context_menu(url_text) # 为 URL 输入框创建右键菜单
     bind_tab_navigation(url_text) # 绑定 Tab 键导航
     text_scrollbar = ttk.Scrollbar(text_pane, orient="vertical", command=url_text.yview)
@@ -938,7 +1269,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
                 resp = session.get(url)
                 if resp.ok:
                     image = Image.open(io.BytesIO(resp.content))
-                    image.thumbnail((int(30 * scale), int(30 * scale)), Image.Resampling.LANCZOS)
+                    image.thumbnail((round(30 * ui_scale), round(30 * ui_scale)), Image.Resampling.LANCZOS)
                     photo = ImageTk.PhotoImage(image)
                     treeview.item(item_id, image=photo)
                     setattr(treeview, f"_image_ref_{item_id}", photo) # 为防止图片被垃圾回收，保存引用
@@ -975,33 +1306,45 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     build_tree_items("", resource_list, open_sub=True) # 构建树视图项，初始展开一级目录
     treeview.bind("<<TreeviewSelect>>", on_tree_select)
 
+    # 底部状态栏：下载进度标签与横向铺满的进度条
+    # 底部各栏都以 side="bottom" 先行打包，最后才打包上方的内容区，这样窗口高度不足时被压缩的是内容区，而不是把底部控件挤出窗口
+    status_frame = ttk.Frame(container_frame)
+    status_frame.pack(side="bottom", fill="x", pady=(round(12 * ui_scale), 0))
+    status_frame.columnconfigure(0, weight=1)
+
+    progress_label = ttk.Label(status_frame, text="等待下载", style="Caption.TLabel") # 添加下载进度标签
+    progress_label.grid(row=0, column=0, sticky="w")
+    download_progress_bar = ttk.Progressbar(status_frame, mode="determinate") # 添加下载进度条
+    download_progress_bar.grid(row=1, column=0, sticky="ew", pady=(round(6 * ui_scale), 0))
+
+    # 底部操作栏：左侧为辅助操作，右侧为主要操作
     button_frame = ttk.Frame(container_frame)
-    button_frame.pack(fill="x", pady=int(5 * scale))
+    button_frame.pack(side="bottom", fill="x")
+    ttk.Separator(container_frame, orient="horizontal").pack(side="bottom", fill="x", pady=(round(16 * ui_scale), round(14 * ui_scale))) # 用分隔线把操作区与内容区分开
 
     # 按钮：设置 Token
     token_btn = ttk.Button(button_frame, text="设置 Token", command=show_access_token_window)
-    token_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+    token_btn.pack(side="left")
 
-    # 复选框：添加书签
+    # 开关：添加书签
     bookmark_var = tk.BooleanVar(value=True)
-    bookmark_checkbox = ttk.Checkbutton(button_frame, text="添加书签", variable=bookmark_var)
-    bookmark_checkbox.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+    bookmark_checkbox = ttk.Checkbutton(button_frame, text="添加 PDF 书签", variable=bookmark_var, style=SWITCH_STYLE)
+    bookmark_checkbox.pack(side="left", padx=(round(16 * ui_scale), 0))
 
-    # 按钮：下载
-    download_btn = ttk.Button(button_frame, text="下载", command=download)
-    download_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+    # 按钮：下载（作为主要操作，使用强调色）
+    download_btn = ttk.Button(button_frame, text="下载", style=ACCENT_BUTTON_STYLE, width=9, command=download)
+    download_btn.pack(side="right")
 
     # 按钮：解析并复制
-    copy_btn = ttk.Button(button_frame, text="解析并复制", command=parse_and_copy)
-    copy_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+    copy_btn = ttk.Button(button_frame, text="解析并复制", width=9, command=parse_and_copy)
+    copy_btn.pack(side="right", padx=(0, round(8 * ui_scale)))
 
-    # 下载进度条
-    download_progress_bar = ttk.Progressbar(button_frame, length=125 * scale, mode="determinate") # 添加下载进度条
-    download_progress_bar.pack(side="bottom", pady=int(10 * scale), ipady=int(5 * scale)) # 设置垂直外边距、进度条高度（跟随缩放）
+    # 最后打包内容区，使其占据剩余的全部空间
+    paned.pack(side="top", fill="both", expand=True, pady=(round(14 * ui_scale), 0))
 
-    # 下载进度标签
-    progress_label = ttk.Label(button_frame, text="等待下载", anchor="center", font=(ui_font_family, 9)) # 初始时文本为空，居中
-    progress_label.pack(side="bottom", pady=int(5 * scale)) # 设置垂直外边距、标签高度（跟随缩放）
+    # 设置窗口初始尺寸与最小尺寸（不超过屏幕可用范围）
+    root.geometry(f"{min(round(1000 * ui_scale), root.winfo_screenwidth() - round(80 * ui_scale))}x{min(round(700 * ui_scale), root.winfo_screenheight() - round(120 * ui_scale))}")
+    root.minsize(round(680 * ui_scale), round(540 * ui_scale))
 
     center_window(root) # 让窗口居中
     root.mainloop() # 开始主循环

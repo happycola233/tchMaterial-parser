@@ -1,7 +1,7 @@
 # 图标资源说明
 
-本目录存放图标的**源文件**与**打包时使用的图标**。这些文件在程序运行时都不会被读取，
-它们要么在打包阶段由 PyInstaller 烧进可执行文件，要么以 base64 的形式写死在源码中。
+本目录存放图标的**源文件**与**打包时使用的图标**。`logo.icns` 与 `icon.ico` 只在构建阶段使用；
+`window_icon.png` 由程序在运行时读取，并通过 PyInstaller 的 `datas` 一并打包。
 
 | 文件 | 用途 | 由谁使用 |
 | --- | --- | --- |
@@ -9,7 +9,7 @@
 | `logo.png` | 1024×1024 位图母版，由 `logo.svg` 导出 | `logo.icns` 与 `icon.ico` 的生成来源 |
 | `logo.icns` | macOS `.app` 应用包图标 | `tchMaterial-parser.spec` 中的 `BUNDLE(icon=...)` |
 | `icon.ico` | Windows 可执行文件图标 | `tchMaterial-parser.spec` 中的 `EXE(icon=...)` |
-| `window_icon.png` | 程序运行时的窗口图标（窗口左上角、Alt+Tab） | 以 base64 形式内嵌于 `src/tchmaterial_parser.py` 的 `set_icon()` 中 |
+| `window_icon.png` | 程序运行时的窗口图标（窗口左上角、Alt+Tab，以及主界面标题旁） | `src/tchmaterial_parser.py` 直接读取，`tchMaterial-parser.spec` 负责打包 |
 
 ## 更换图标时的操作
 
@@ -39,15 +39,7 @@ Image.open("assets/logo.png").convert("RGBA").save(
 iconutil -c icns logo.iconset -o assets/logo.icns
 ```
 
-### 3. 同步 `window_icon.png` 与源码中的 base64
+### 3. 更新 `window_icon.png`
 
-窗口图标是以 base64 字符串**写死在源码里**的（这样打包时无需额外附带资源文件）。
-更新 `window_icon.png` 后，必须重新生成这段字符串并替换 `set_icon()` 中的内容，否则
-窗口图标不会跟着变化：
-
-```python
-import base64
-
-with open("assets/window_icon.png", "rb") as f:
-    print(base64.b64encode(f.read()).decode())
-```
+程序以 `assets/window_icon.png` 作为运行时窗口图标的唯一来源。更新图标时直接替换该文件即可，
+无需再同步源码字符串；`tchMaterial-parser.spec` 会在打包时将它收集到相同的 `assets/` 相对路径。
