@@ -15,7 +15,7 @@
 - 🖥️**高 DPI 适配**：优化 UI 以适配高分辨率屏幕，避免界面模糊问题。
 - 💻**跨平台支持**：支持 Windows、Linux、macOS 等操作系统（需要图形界面）。
 
-![工具截图](./res/main.png)
+![工具截图](./docs/images/main.png)
 
 ## 📥 下载与安装方法
 
@@ -72,7 +72,7 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 > 2. 粘贴代码时，不要粘贴到 “过滤” 或 “筛选器” 上，而是 “>” 后面！
 > 3. 粘贴时如遇到警告，请先输入 “**允许粘贴**” 四个字，然后再次粘贴代码！
 >
-> ![提示](./res/get_token.png)
+> ![提示](./docs/images/get_token.png)
 
 1. **打开浏览器**，访问[国家中小学智慧教育平台](https://auth.smartedu.cn/uias/login)并**登录账号**。
 2. 按下 **F12** 或 **Ctrl+Shift+I**，或右键——检查（审查元素）打开**开发者工具**，选择**控制台（Console）**。
@@ -110,7 +110,7 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 若您勾选了 “**设置书签**” 复选框，则本工具会在课本下载完成后自动为其添加书签，在查看 PDF 时可快速跳转到指定位置。
 
-![添加了书签的 PDF 文件](./res/bookmark.png)
+![添加了书签的 PDF 文件](./docs/images/bookmark.png)
 
 ## ❓ 常见问题
 
