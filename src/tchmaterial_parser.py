@@ -1492,10 +1492,15 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
         search_entry.selection_range(0, "end")
         return "break"
 
-    def scroll_tree_horizontally(direction: int) -> str:
+    def scroll_tree_horizontally(steps: float) -> str:
         hide_tree_tooltip()
-        treeview.xview_scroll(direction, "units")
+        first, last = treeview.xview()
+        treeview.xview_moveto(first + steps * (last - first) * 0.2)
         return "break"
+
+    def on_tree_shift_mousewheel(event: tk.Event) -> str:
+        delta_unit = 1 if os_name == "Darwin" else 120
+        return scroll_tree_horizontally(-event.delta / delta_unit)
 
     refresh_resource_tree() # 初始展示完整资源树并展开一级目录
     search_var.trace_add("write", schedule_search)
@@ -1506,7 +1511,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     treeview.bind("<Motion>", on_tree_motion)
     treeview.bind("<Leave>", lambda _event: leave_tree())
     treeview.bind("<ButtonPress>", lambda _event: hide_tree_tooltip())
-    treeview.bind("<Shift-MouseWheel>", lambda event: scroll_tree_horizontally(-1 if event.delta > 0 else 1))
+    treeview.bind("<Shift-MouseWheel>", on_tree_shift_mousewheel)
     treeview.bind("<Shift-Button-4>", lambda _event: scroll_tree_horizontally(-1))
     treeview.bind("<Shift-Button-5>", lambda _event: scroll_tree_horizontally(1))
     search_entry.bind("<Escape>", lambda _event: search_var.set(""))
