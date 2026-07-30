@@ -813,6 +813,32 @@ class resource_helper: # 获取网站上资源的数据
         # lesson_hier = self.fetch_lesson_list()
         return { **book_hier }
 
+def filter_resource_items(items: dict[str, dict], query: str) -> dict[str, dict]: # 按完整分类路径筛选资源树
+    keywords = query.casefold().split()
+    if not keywords:
+        return items
+
+    def filter_branch(branch: dict[str, dict], parent_names: tuple[str, ...]) -> dict[str, dict]:
+        matches: dict[str, dict] = {}
+        for option_id, option_data in branch.items():
+            path_names = (*parent_names, option_data["display_name"])
+            children = option_data.get("children", {})
+            if children:
+                filtered_children = filter_branch(children, path_names)
+                if filtered_children:
+                    matches[option_id] = { **option_data, "children": filtered_children }
+            elif all(keyword in " ".join(path_names).casefold() for keyword in keywords):
+                matches[option_id] = option_data
+        return matches
+
+    return filter_branch(items, ())
+
+def count_resource_items(items: dict[str, dict]) -> int: # 统计资源树中的末级资源数量
+    return sum(
+        count_resource_items(children) if (children := option_data.get("children", {})) else 1
+        for option_data in items.values()
+    )
+
 def thread_it(func: callable, *args: tuple, **kwargs: dict) -> None: # 打包函数到线程
     t = threading.Thread(target=func, args=args, kwargs=kwargs)
     t.daemon = True
@@ -1213,7 +1239,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     paned = ttk.PanedWindow(container_frame, orient="horizontal") # 创建水平分割窗口（在底部各栏之后才打包，见文件末尾）
     treeview_pane = ttk.Frame(paned, padding=(0, 0, round(8 * ui_scale), 0)) # 创建树视图的子框架，放在分割窗口的左侧（右侧留出与分割条之间的间距）
     treeview_pane.columnconfigure(0, weight=1)
-    treeview_pane.rowconfigure(1, weight=1)
+    treeview_pane.rowconfigure(2, weight=1)
     text_pane = ttk.Frame(paned, padding=(round(8 * ui_scale), 0, 0, 0)) # 创建文本框的子框架，放在分割窗口的右侧
     text_pane.columnconfigure(0, weight=1)
     text_pane.rowconfigure(1, weight=1)
@@ -1222,17 +1248,32 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     paned.update_idletasks()
     root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%（不能使用 ui_call）
 
-    treeview_label = ttk.Label(treeview_pane, text="资源列表", style="Heading.TLabel") # 添加树视图标签
-    treeview_label.grid(row=0, column=0, sticky="w", pady=(0, round(6 * ui_scale)))
+    treeview_header = ttk.Frame(treeview_pane)
+    treeview_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, round(6 * ui_scale)))
+    treeview_header.columnconfigure(0, weight=1)
+    treeview_label = ttk.Label(treeview_header, text="资源列表", style="Heading.TLabel") # 添加树视图标签
+    treeview_label.grid(row=0, column=0, sticky="w")
+    search_status_label = ttk.Label(treeview_header, style="Caption.TLabel")
+    search_status_label.grid(row=0, column=1, sticky="e")
+
+    search_frame = ttk.Frame(treeview_pane)
+    search_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, round(8 * ui_scale)))
+    search_frame.columnconfigure(1, weight=1)
+    ttk.Label(search_frame, text="搜索").grid(row=0, column=0, padx=(0, round(8 * ui_scale)))
+    search_var = tk.StringVar()
+    search_entry = ttk.Entry(search_frame, textvariable=search_var)
+    search_entry.grid(row=0, column=1, sticky="ew")
+    clear_search_btn = ttk.Button(search_frame, text="清除", width=5, command=lambda: search_var.set(""))
+    clear_search_btn.grid(row=0, column=2, padx=(round(6 * ui_scale), 0))
+
     treeview = ttk.Treeview(treeview_pane, style="Custom.Treeview", show="tree", selectmode="browse", height=12) # 创建树视图，使用自定义样式（该样式在 apply_theme() 中配置），隐藏列标题，设置选择模式为单选
-    treeview.grid(row=1, column=0, sticky="nsew")
+    treeview.column("#0", stretch=False)
+    treeview.grid(row=2, column=0, sticky="nsew")
     treeview_scrollbar = ttk.Scrollbar(treeview_pane, orient="vertical", command=treeview.yview)
-    treeview.configure(yscrollcommand=lambda f, l: auto_hide_scrollbar(treeview_scrollbar, f, l))
-    treeview_scrollbar.grid(row=1, column=1, sticky="ns")
-    # BUG: 水平滚动条不起作用
-    # hsb = ttk.Scrollbar(treeview_pane, orient="horizontal", command=treeview.xview)
-    # treeview.configure(xscrollcommand=lambda f, l: auto_hide_scrollbar(hsb, f, l))
-    # hsb.grid(row=2, column=0, sticky="ew")
+    treeview_scrollbar.grid(row=2, column=1, sticky="ns")
+    treeview_horizontal_scrollbar = ttk.Scrollbar(treeview_pane, orient="horizontal", command=treeview.xview)
+    treeview.configure(xscrollcommand=lambda f, l: auto_hide_scrollbar(treeview_horizontal_scrollbar, f, l))
+    treeview_horizontal_scrollbar.grid(row=3, column=0, sticky="ew")
 
     url_label = ttk.Label(text_pane, text="资源页面网址", style="Heading.TLabel") # 添加 URL 标签
     url_label.grid(row=0, column=0, sticky="w", pady=(0, round(6 * ui_scale)))
@@ -1248,40 +1289,106 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     text_scrollbar.grid(row=1, column=1, sticky="ns")
     url_text.focus()
 
-    tree_item_data: dict[str, dict] = {} # 构建树视图数据的字典，键为树项 ID，值为资源数据
+    tree_item_data: dict[str, dict] = {} # 键为树项 ID，值为资源数据
+    tree_item_paths: dict[str, tuple[str, ...]] = {} # 保存完整分类路径，用于悬停提示
+    tree_item_images: dict[str, ImageTk.PhotoImage] = {} # 缓存已加载的封面，筛选后继续复用
+    loading_tree_images: set[str] = set()
+    tree_font = tkfont.nametofont("AppBodyFont")
+    tree_content_width = 0
 
-    def build_tree_items(parent: str, items: dict[str, dict], open_sub: bool) -> None: # 递归构建树视图项
+    def build_tree_items(parent: str, items: dict[str, dict], parent_names: tuple[str, ...], expand_all: bool) -> None: # 递归构建树视图项
+        nonlocal tree_content_width
         for option_id, option_data in items.items():
             item_id = f"{parent}:{option_id}" if parent else option_id
+            display_name = option_data["display_name"]
+            path_names = (*parent_names, display_name)
             tree_item_data[item_id] = option_data
-            treeview.insert(parent, "end", iid=item_id, text=option_data["display_name"], open=open_sub) # 插入树项，设置显示名称，初始展开状态
+            tree_item_paths[item_id] = path_names
+            treeview.insert(
+                parent,
+                "end",
+                iid=item_id,
+                text=display_name,
+                image=tree_item_images.get(item_id, ""),
+                open=expand_all or not parent,
+            )
             children: dict[str, dict] = option_data.get("children", {})
             if children: # 如果有子项，递归构建子树项
-                build_tree_items(item_id, children, open_sub=False)
+                build_tree_items(item_id, children, path_names, expand_all)
+
+            depth_width = len(path_names) * round(20 * ui_scale)
+            image_width = round(34 * ui_scale) if option_data.get("custom_properties", {}).get("thumbnails") else 0
+            tree_content_width = max(tree_content_width, depth_width + image_width + tree_font.measure(display_name) + round(20 * ui_scale))
+
+    def resize_tree_column(width: int) -> None: # 让树列至少铺满可视区域，内容过长时启用横向滚动
+        treeview.column("#0", width=max(tree_content_width, width - round(2 * ui_scale)))
+
+    def apply_tree_icon(item_id: str, image: Image.Image | None) -> None:
+        loading_tree_images.discard(item_id)
+        if image is None:
+            return
+        photo = ImageTk.PhotoImage(image)
+        tree_item_images[item_id] = photo
+        if treeview.exists(item_id):
+            treeview.item(item_id, image=photo)
+
+    def load_tree_icon(item_id: str, url: str) -> None: # 在线程中下载封面，在主线程中更新控件
+        try:
+            resp = session.get(url)
+            if not resp.ok:
+                ui_call(apply_tree_icon, item_id, None)
+                return
+            image = Image.open(io.BytesIO(resp.content))
+            image.thumbnail((round(30 * ui_scale), round(30 * ui_scale)), Image.Resampling.LANCZOS)
+            ui_call(apply_tree_icon, item_id, image)
+        except Exception as e:
+            print_error(e)
+            ui_call(apply_tree_icon, item_id, None)
+
+    def queue_tree_icon(item_id: str) -> None:
+        resource_data = tree_item_data[item_id]
+        thumbnails = resource_data.get("custom_properties", {}).get("thumbnails")
+        if thumbnails and item_id not in tree_item_images and item_id not in loading_tree_images:
+            loading_tree_images.add(item_id)
+            thread_it(load_tree_icon, item_id, thumbnails[0])
+
+    def load_visible_tree_icons() -> None: # 搜索或滚动后只加载当前可见资源的封面
+        for item_id, resource_data in tree_item_data.items():
+            if not resource_data.get("children") and treeview.bbox(item_id):
+                queue_tree_icon(item_id)
+
+    def on_tree_view_change(first: str, last: str) -> None:
+        auto_hide_scrollbar(treeview_scrollbar, first, last)
+        root.after_idle(load_visible_tree_icons)
+
+    def refresh_resource_tree() -> None: # 根据搜索词重建树视图
+        nonlocal tree_content_width
+        query = search_var.get().strip()
+        visible_items = filter_resource_items(resource_list, query)
+
+        leave_tree()
+        treeview.delete(*treeview.get_children())
+        tree_item_data.clear()
+        tree_item_paths.clear()
+        tree_content_width = 0
+        build_tree_items("", visible_items, (), expand_all=bool(query))
+        resize_tree_column(treeview.winfo_width())
+
+        result_count = count_resource_items(visible_items)
+        search_status_label.config(text=f"{result_count} 项" if result_count else "无匹配资源")
+        clear_search_btn.state(["!disabled"] if query else ["disabled"])
+        root.after_idle(load_visible_tree_icons)
 
     def on_tree_select(event: tk.Event) -> None: # 处理树视图选择事件
         selection = treeview.selection()
         if not selection:
             return
 
-        def load_icon(item_id: str, url: str) -> None: # 加载树项图标
-            try:
-                resp = session.get(url)
-                if resp.ok:
-                    image = Image.open(io.BytesIO(resp.content))
-                    image.thumbnail((round(30 * ui_scale), round(30 * ui_scale)), Image.Resampling.LANCZOS)
-                    photo = ImageTk.PhotoImage(image)
-                    treeview.item(item_id, image=photo)
-                    setattr(treeview, f"_image_ref_{item_id}", photo) # 为防止图片被垃圾回收，保存引用
-            except Exception as e:
-                print_error(e)
-
         item = selection[0]
         children = treeview.get_children(item)
         if children: # 如果选中的项有子项，则加载子项的预览图，否则插入 URL
             for child in children: # 遍历子项，设置子项的图片
-                if not treeview.item(child)["image"] and tree_item_data[child].get("custom_properties", {}).get("thumbnails"):
-                    thread_it(load_icon, child, tree_item_data[child]["custom_properties"]["thumbnails"][0])
+                queue_tree_icon(child)
         else:
             resource_data = tree_item_data.get(item)
             if not resource_data:
@@ -1303,8 +1410,109 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
                 url_text.insert("end", f"\n{url}")
             url_text.see("end") # 滚动到文本框底部
 
-    build_tree_items("", resource_list, open_sub=True) # 构建树视图项，初始展开一级目录
+    tooltip_window: tk.Toplevel | None = None
+    tooltip_after_id: str | None = None
+    hovered_tree_item = ""
+
+    def hide_tree_tooltip() -> None:
+        nonlocal tooltip_window, tooltip_after_id
+        if tooltip_after_id:
+            root.after_cancel(tooltip_after_id)
+            tooltip_after_id = None
+        if tooltip_window:
+            tooltip_window.destroy()
+            tooltip_window = None
+
+    def show_tree_tooltip(item_id: str, x_root: int, y_root: int) -> None: # 悬停时显示完整名称与分类路径
+        nonlocal tooltip_window, tooltip_after_id
+        tooltip_after_id = None
+        if item_id != hovered_tree_item or not treeview.exists(item_id):
+            return
+
+        path_names = tree_item_paths[item_id]
+        text = path_names[-1]
+        if len(path_names) > 1:
+            text += f"\n分类：{' › '.join(path_names[:-1])}"
+
+        tooltip_window = tk.Toplevel(root)
+        tooltip_window.overrideredirect(True)
+        label = tk.Label(
+            tooltip_window,
+            text=text,
+            justify="left",
+            wraplength=round(480 * ui_scale),
+            font="AppBodyFont",
+            background=current_colors["surface"],
+            foreground=current_colors["fg"],
+            relief="solid",
+            borderwidth=1,
+            padx=round(10 * ui_scale),
+            pady=round(7 * ui_scale),
+        )
+        label.pack()
+        tooltip_window.update_idletasks()
+        x = min(x_root + round(12 * ui_scale), root.winfo_screenwidth() - tooltip_window.winfo_reqwidth())
+        y = min(y_root + round(18 * ui_scale), root.winfo_screenheight() - tooltip_window.winfo_reqheight())
+        tooltip_window.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+
+    def on_tree_motion(event: tk.Event) -> None:
+        nonlocal hovered_tree_item, tooltip_after_id
+        item_id = treeview.identify_row(event.y)
+        if item_id == hovered_tree_item:
+            return
+        hide_tree_tooltip()
+        hovered_tree_item = item_id
+        if item_id:
+            tooltip_after_id = root.after(
+                450,
+                lambda: show_tree_tooltip(item_id, event.x_root, event.y_root),
+            )
+
+    def leave_tree() -> None:
+        nonlocal hovered_tree_item
+        hovered_tree_item = ""
+        hide_tree_tooltip()
+
+    search_after_id: str | None = None
+
+    def schedule_search(*_args: str) -> None: # 输入停止片刻后执行筛选，避免连续重建树视图
+        nonlocal search_after_id
+        if search_after_id:
+            root.after_cancel(search_after_id)
+
+        def run_search() -> None:
+            nonlocal search_after_id
+            search_after_id = None
+            refresh_resource_tree()
+
+        search_after_id = root.after(150, run_search)
+
+    def focus_search(_event: tk.Event) -> str:
+        search_entry.focus_set()
+        search_entry.selection_range(0, "end")
+        return "break"
+
+    def scroll_tree_horizontally(direction: int) -> str:
+        hide_tree_tooltip()
+        treeview.xview_scroll(direction, "units")
+        return "break"
+
+    refresh_resource_tree() # 初始展示完整资源树并展开一级目录
+    search_var.trace_add("write", schedule_search)
+    treeview.configure(yscrollcommand=on_tree_view_change)
     treeview.bind("<<TreeviewSelect>>", on_tree_select)
+    treeview.bind("<<TreeviewOpen>>", lambda _event: root.after_idle(load_visible_tree_icons))
+    treeview.bind("<Configure>", lambda event: resize_tree_column(event.width))
+    treeview.bind("<Motion>", on_tree_motion)
+    treeview.bind("<Leave>", lambda _event: leave_tree())
+    treeview.bind("<ButtonPress>", lambda _event: hide_tree_tooltip())
+    treeview.bind("<Shift-MouseWheel>", lambda event: scroll_tree_horizontally(-1 if event.delta > 0 else 1))
+    treeview.bind("<Shift-Button-4>", lambda _event: scroll_tree_horizontally(-1))
+    treeview.bind("<Shift-Button-5>", lambda _event: scroll_tree_horizontally(1))
+    search_entry.bind("<Escape>", lambda _event: search_var.set(""))
+    root.bind("<Control-f>", focus_search)
+    if os_name == "Darwin":
+        root.bind("<Command-f>", focus_search)
 
     # 底部状态栏：下载进度标签与横向铺满的进度条
     # 底部各栏都以 side="bottom" 先行打包，最后才打包上方的内容区，这样窗口高度不足时被压缩的是内容区，而不是把底部控件挤出窗口
