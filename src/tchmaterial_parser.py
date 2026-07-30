@@ -608,7 +608,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         # 只读文本区，支持选择复制（外面套一层卡片，以获得与其他控件一致的圆角边框）
         help_card = make_card(help_frame)
         help_card.pack(fill="both", expand=True)
-        txt = tk.Text(help_card, width=64, height=24, wrap="word", font="AppCaptionFont", padx=round(4 * ui_scale), pady=round(4 * ui_scale))
+        txt = tk.Text(help_card, width=88, height=24, wrap="word", font="AppCaptionFont", padx=round(4 * ui_scale), pady=round(4 * ui_scale))
         txt.insert("1.0", help_text)
         txt.config(state="disabled")
         txt.pack(fill="both", expand=True)
