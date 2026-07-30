@@ -1,10 +1,50 @@
-# [国家中小学智慧教育平台 电子课本](https://basic.smartedu.cn/tchMaterial/)下载工具
+<div align="center">
 
-![Python Version](https://img.shields.io/badge/Python-3.x-blue.svg)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Made With Love❤️](https://img.shields.io/badge/Made_With-%E2%9D%A4-red.svg)
+<img src="./assets/logo.png" alt="tchMaterial-parser Logo" width="128" />
 
-本工具可以帮助您从[**国家中小学智慧教育平台**](https://basic.smartedu.cn/)获取电子课本的 PDF 文件网址并进行下载，让您更方便地获取课本内容。
+# tchMaterial-parser
+
+**[国家中小学智慧教育平台](https://basic.smartedu.cn/)[电子课本](https://basic.smartedu.cn/tchMaterial/)下载工具**
+
+一键解析并批量下载电子课本 PDF，自动命名、自动添加书签，开箱即用。
+
+<br />
+
+[![GitHub Release](https://img.shields.io/github/v/release/happycola233/tchMaterial-parser?style=flat-square&color=4c8bf5&logo=github)](../../releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/happycola233/tchMaterial-parser/total?style=flat-square&color=4c8bf5&label=downloads)](../../releases)
+[![Stars](https://img.shields.io/github/stars/happycola233/tchMaterial-parser?style=flat-square&color=f5a623)](../../stargazers)
+[![Python Version](https://img.shields.io/badge/Python-3.10+-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)](../../releases)
+[![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+
+[![Trendshift](https://trendshift.io/api/badge/repositories/13774)](https://trendshift.io/repositories/13774)
+
+[📥 下载安装](#-下载与安装方法) · [🛠️ 使用方法](#️-使用方法) · [❓ 常见问题](#-常见问题) · [🐛 反馈问题](../../issues)
+
+</div>
+
+---
+
+<div align="center">
+
+<img src="./docs/images/main.png" alt="浅色模式下的工具截图" width="48%" />
+<img src="./docs/images/main_dark.png" alt="深色模式下的工具截图" width="48%" />
+
+<sub>☀️ 浅色模式（左） &nbsp;·&nbsp; 🌙 深色模式（右）</sub>
+
+</div>
+
+## 📖 目录
+
+- [✨ 工具特点](#-工具特点)
+- [🏆 项目成就](#-项目成就)
+- [📥 下载与安装方法](#-下载与安装方法)
+- [🛠️ 使用方法](#️-使用方法)
+- [❓ 常见问题](#-常见问题)
+- [⭐ Star History](#-star-history)
+- [🤝 贡献指南](#-贡献指南)
+- [⚖️ 免责声明](#️-免责声明)
+- [📜 许可证](#-许可证)
 
 ## ✨ 工具特点
 
@@ -12,16 +52,23 @@
 - 📂 **自动命名文件**：工具会自动使用电子课本的名称作为默认文件名，方便管理下载的课本文件。
 - 🔖 **自动添加书签**：若勾选了 “添加书签” 选项，则会在下载完成后为电子课本添加书签，在查看 PDF 时可更方便地跳转到指定位置。
 - 🔑 **支持 Access Token**：支持用户[手动输入 Access Token](#2--设置-access-token可选) 并自动保存，下次启动可自动加载。
-- 🔎 **教材快速搜索**：可按教材名称或“学段、学科、年级”等分类组合搜索，结果会自动展开；长名称支持横向滚动，悬停时可查看完整信息和大尺寸封面。
+- 🔎 **教材快速搜索**：可按教材名称或 “学段、学科、年级” 等分类组合搜索，结果会自动展开；长名称支持横向滚动，悬停时可查看完整信息和大尺寸封面。
 - 🖥️ **高 DPI 适配**：优化 UI 以适配高分辨率屏幕，避免界面模糊问题。
 - 🌗 **深色模式**：启动时自动跟随系统的浅色/深色模式，也可点击右上角的按钮手动切换，切换结果会被记住。
 - 💻 **跨平台支持**：支持 Windows、Linux、macOS 等操作系统（需要图形界面）。
 
-| 浅色模式 | 深色模式 |
-| :-: | :-: |
-| ![浅色模式下的工具截图](./docs/images/main.png) | ![深色模式下的工具截图](./docs/images/main_dark.png) |
+## 🏆 项目成就
+
+感谢每一位使用者与贡献者，本项目曾于 2025 年 5 月登上 **GitHub Trending 总榜第 3 名**（单日新增约 400 Stars），并获得 [Trendshift](https://trendshift.io/repositories/13774) **Python 日榜第 3 名**。
 
 ## 📥 下载与安装方法
+
+| 方式 | 适用平台 | 获取途径 |
+| :-- | :-- | :-- |
+| 🐙 **GitHub Releases** | Windows / Linux / macOS（x86_64、Arm64） | [前往 Releases 页面](../../releases) |
+| 📦 **WinGet** | Windows 10 / 11 / Server 2025 | `winget install tchMaterial-parser` |
+| 🐧 **AUR** | Arch Linux | `yay -S tchmaterial-parser` |
+| 🐍 **从源码运行** | 任意平台（需 Python 3.10+） | [见下文](#从源码运行) |
 
 ### GitHub Releases
 
@@ -138,42 +185,71 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 若您勾选了 “**设置书签**” 复选框，则本工具会在课本下载完成后自动为其添加书签，在查看 PDF 时可快速跳转到指定位置。
 
+<div align="center">
+
 ![添加了书签的 PDF 文件](./docs/images/bookmark.png)
+
+</div>
 
 ## ❓ 常见问题
 
-### 1. ⚠️ 为什么下载失败？
+<details open>
+<summary><b>1. ⚠️ 为什么下载失败？</b></summary>
+
+<br />
 
 - 如果您没有设置 Access Token，可能是本工具使用的方法失效了，请[**设置 Access Token**](#2--设置-access-token可选)🔑。
 - 如果您设置了 Access Token，由于其具有时效性（一般为 7 天），因此极有可能是 **Access Token 过期了**，请重新获取新的 Access Token。
 - **确认网络连接是否正常**🌐，有时网络不稳定可能导致下载失败。
 - **确保输入的网址有效**🔗，部分旧资源可能已被移除。
 
-### 2. 💾 Access Token 保存在哪里？
+</details>
+
+<details>
+<summary><b>2. 💾 Access Token 保存在哪里？</b></summary>
+
+<br />
 
 - **Windows**：Token 会存储在**注册表** `HKEY_CURRENT_USER\Software\tchMaterial-parser` 项中的 `AccessToken` 值。
-- **Linux**: Token 会存储在**文件** `~/.config/tchMaterial-parser/data.json` 中。
+- **Linux**：Token 会存储在**文件** `~/.config/tchMaterial-parser/data.json` 中。
 - **macOS**：Token 会存储在**文件** `~/Library/Application Support/tchMaterial-parser/data.json` 中。
 - **其他操作系统**：目前不受支持。
 
-### 3. 🔐 Token 会不会泄露？
+</details>
+
+<details>
+<summary><b>3. 🔐 Token 会不会泄露？</b></summary>
+
+<br />
 
 - 本工具**不会上传** Token，也不会存储在云端，仅用于本地请求授权。
 - **请勿在公开场合分享 Token**，以免您的账号被他人使用，造成严重后果。
 
+</details>
+
 ## ⭐ Star History
 
+<div align="center">
 <a href="https://www.star-history.com/?repos=happycola233%2FtchMaterial-parser&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=happycola233/tchMaterial-parser&type=date&theme=dark&legend=top-left&sealed_token=rHSHeJm9apLZ5Joxfm_nKzQRzW4EQw8dyYHQIl5FSwpAfvm9WUwaMj4vQGTKluRUKTQq7IC7__9VDfWZMNnFWxZrVAs0hQBSINIWWdzocR3AqO4iP4R2EA" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=happycola233/tchMaterial-parser&type=date&legend=top-left&sealed_token=rHSHeJm9apLZ5Joxfm_nKzQRzW4EQw8dyYHQIl5FSwpAfvm9WUwaMj4vQGTKluRUKTQq7IC7__9VDfWZMNnFWxZrVAs0hQBSINIWWdzocR3AqO4iP4R2EA" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=happycola233/tchMaterial-parser&type=date&legend=top-left&sealed_token=rHSHeJm9apLZ5Joxfm_nKzQRzW4EQw8dyYHQIl5FSwpAfvm9WUwaMj4vQGTKluRUKTQq7IC7__9VDfWZMNnFWxZrVAs0hQBSINIWWdzocR3AqO4iP4R2EA" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=happycola233/tchMaterial-parser&type=date&theme=dark&legend=top-left&sealed_token=lp-dz0jwomojnfZdkKWtPYjxu2cIaluD151Uh_sKuhgbIy1MAw4WMMHg9KPtHrdNSur9Z6j6P4cR0NAR7-8vT_ttSDIBynMuDVy5ljc73IMV_4RAyLzs1GtoC6yH3QNnQtQahl8r9J2REXs-NNJ7Pu55SQ2X52m6JNy5v91zdGypyXAi758su9beu7pb" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=happycola233/tchMaterial-parser&type=date&legend=top-left&sealed_token=lp-dz0jwomojnfZdkKWtPYjxu2cIaluD151Uh_sKuhgbIy1MAw4WMMHg9KPtHrdNSur9Z6j6P4cR0NAR7-8vT_ttSDIBynMuDVy5ljc73IMV_4RAyLzs1GtoC6yH3QNnQtQahl8r9J2REXs-NNJ7Pu55SQ2X52m6JNy5v91zdGypyXAi758su9beu7pb" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=happycola233/tchMaterial-parser&type=date&legend=top-left&sealed_token=lp-dz0jwomojnfZdkKWtPYjxu2cIaluD151Uh_sKuhgbIy1MAw4WMMHg9KPtHrdNSur9Z6j6P4cR0NAR7-8vT_ttSDIBynMuDVy5ljc73IMV_4RAyLzs1GtoC6yH3QNnQtQahl8r9J2REXs-NNJ7Pu55SQ2X52m6JNy5v91zdGypyXAi758su9beu7pb" />
  </picture>
 </a>
+</div>
 
 ## 🤝 贡献指南
 
-如果您发现 Bug 或有改进建议，欢迎提交 **Issue** 或 **Pull Request**，让我们一起完善本工具！
+如果您发现 Bug 或有改进建议，欢迎提交 **[Issue](../../issues)** 或 **[Pull Request](../../pulls)**，让我们一起完善本工具！
+
+感谢所有为本项目做出贡献的朋友：
+
+<div align="center">
+<a href="https://github.com/happycola233/tchMaterial-parser/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=happycola233/tchMaterial-parser" alt="Contributors" />
+</a>
+</div>
 
 ## ⚖️ 免责声明
 
@@ -189,3 +265,8 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 ## 💌 友情链接
 
 - 📚 您也可以在 [ChinaTextbook](https://github.com/TapXWorld/ChinaTextbook) 项目中下载归档的电子课本 PDF。
+
+<div align="center">
+<br />
+<sub>如果这个工具对您有帮助，欢迎点一个 ⭐ Star 支持一下！</sub>
+</div>
