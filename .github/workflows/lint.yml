@@ -1,0 +1,35 @@
+# 静态检查：只拦截「必然是 bug」的问题（语法错误、未定义的变量名等）
+# 不检查代码风格与行长，避免对中文注释产生大量无意义的告警
+
+name: Lint Code
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+
+      - name: Lint with flake8
+        # E9  语法错误、缩进错误      F82 使用了未定义的变量（如变量名拼写错误）
+        # F63 比较运算符使用错误      F7  语句位置错误（如循环外的 break）
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
