@@ -1,0 +1,24 @@
+name: ✨ 功能建议
+description: 希望增加新功能或改进现有功能
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 您希望解决什么问题
+      description: 请先说明您遇到的实际困扰，而不是直接描述方案 —— 这样我们更容易判断该怎么做。
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 您期望的做法
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 其他补充
+      description: 例如您目前是怎么绕过这个问题的，或者其他工具是怎么做的。

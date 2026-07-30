@@ -1,0 +1,7 @@
+# 允许「空白 Issue」，以免挡住只想随手提问的用户
+# 若希望强制所有人使用上面的表单（能填全排查信息，但门槛更高），改为 false 即可
+blank_issues_enabled: true
+contact_links:
+  - name: ❓ 下载失败？先看常见问题
+    url: https://github.com/happycola233/tchMaterial-parser#-常见问题
+    about: 绝大多数下载失败是 Access Token 过期导致的，这里有排查步骤。

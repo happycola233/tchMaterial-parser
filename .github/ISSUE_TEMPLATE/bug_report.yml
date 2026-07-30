@@ -1,0 +1,108 @@
+name: 🐛 报告问题（Bug）
+description: 程序无法运行、下载失败、界面异常等问题
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您反馈问题！请尽量把下面的信息填全 —— 缺少这些信息时我们往往无法定位原因，只能来回追问。
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前的检查
+      description: 大部分「下载失败」都能通过下面几步自行解决，请先确认一遍。
+      options:
+        - label: 我已阅读 README 中的[常见问题](https://github.com/happycola233/tchMaterial-parser#-常见问题)
+          required: true
+        - label: 我已尝试重新获取并设置最新的 Access Token（Token 有效期一般为 7 天）
+          required: true
+        - label: 我搜索过已有的 Issue，没有找到相同的问题
+          required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: 系统版本与架构
+      description: 例如「Windows 11 24H2 x64」「macOS 15.3 Arm64」「Ubuntu 24.04 x64」
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 程序版本
+      description: 显示在窗口标题栏中，例如「v4.0」。若为源码运行请填写 commit 号。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: 获取方式
+      options:
+        - GitHub Releases 下载的可执行文件
+        - WinGet 安装
+        - AUR（Arch 用户软件仓库）
+        - 从源码运行
+        - 其他
+    validations:
+      required: true
+
+  - type: dropdown
+    id: token
+    attributes:
+      label: 是否设置了 Access Token
+      options:
+        - 已设置
+        - 未设置
+        - 不清楚
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 您预期会发生什么？实际发生了什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开程序
+        2. 在左侧目录中选择「……」
+        3. 勾选「添加书签」，点击「下载」
+        4. 出现错误提示「……」
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 错误信息与截图
+      description: |
+        请把完整的错误提示文字粘贴在这里（**不要只发截图的一角**），也可以直接把截图拖进本输入框。
+        ⚠️ **请勿粘贴您的 Access Token**，它等同于您的账号密码。
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充说明
+      description: 其他您认为有帮助的信息，例如出问题的教材链接（不含 Token）。
