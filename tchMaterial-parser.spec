@@ -1,11 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
-import os
 
 is_mac = sys.platform.startswith('darwin')
 
 a = Analysis(
-    ['src/tchMaterial-parser.py'],
+    ['src/tchmaterial_parser.py'],
     pathex=[],
     binaries=[],
     datas=[],

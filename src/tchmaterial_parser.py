@@ -774,222 +774,238 @@ access_token: str | None = None
 headers = { "Authorization": "Bearer 0", "X-ND-AUTH": 'MAC id="0",nonce="0",mac="0"' } # 设置请求头部，包含认证信息，其中 “MAC id” 即为 Access Token，“nonce” 和 “mac” 不可缺省但可为任意非空值
 session.proxies = {} # 全局忽略代理
 
-scale: float | None = None
 
-# 在 Windows 上进行高 DPI 适配
-if os_name == "Windows" and win32print and win32gui and win32con and win32api and ctypes:
-    scale = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
-
-    # 调用 API 设置成由应用程序缩放
-    try: # Windows 8.1 或更新
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    except Exception: # Windows 8 或更老
-        ctypes.windll.user32.SetProcessDPIAware()
-
-# 尝试加载已保存的 Access Token
-load_access_token()
-
-# 获取资源列表
-try:
-    resource_list = resource_helper().fetch_resource_list()
-except Exception as e:
-    print_error(e)
-    resource_list = {}
-    messagebox.showwarning("警告", "获取资源列表失败，请手动填写资源链接，或重新打开本程序") # 弹出警告窗口
-
-# GUI
-root = tk.Tk()
-
-ui_font_family = pick_ui_font_family()
-
-if not scale: # 若获取缩放因子失败，通过 Tkinter 估算缩放因子
-    try:
-        scale: float = round(root.winfo_fpixels("1i") / 96.0, 2)
-    except Exception:
-        scale = 1.0
-root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
-root.title(f"国家中小学智慧教育平台 资源下载工具 {VERSION}") # 设置窗口标题
-
-def set_icon() -> None: # 设置窗口图标
-    icon = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAN8AAADfCAYAAAEB/ja6AAAACXBIWXMAAAsTAAALEwEAmpwYAAAE7mlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgOS4xLWMwMDIgNzkuYTZhNjM5NiwgMjAyNC8wMy8xMi0wNzo0ODoyMyAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iIHhtbG5zOnN0RXZ0PSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VFdmVudCMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjkgKFdpbmRvd3MpIiB4bXA6Q3JlYXRlRGF0ZT0iMjAyNC0wOC0xOVQxNDozNzo1MyswODowMCIgeG1wOk1vZGlmeURhdGU9IjIwMjQtMDgtMTlUMTQ6Mzg6MjQrMDg6MDAiIHhtcDpNZXRhZGF0YURhdGU9IjIwMjQtMDgtMTlUMTQ6Mzg6MjQrMDg6MDAiIGRjOmZvcm1hdD0iaW1hZ2UvcG5nIiBwaG90b3Nob3A6Q29sb3JNb2RlPSIzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOmRjMWFiMTUxLTkzYzUtMGI0MS1hYWNiLTYxYzFhMmIyNTczOSIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDpkYzFhYjE1MS05M2M1LTBiNDEtYWFjYi02MWMxYTJiMjU3MzkiIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDpkYzFhYjE1MS05M2M1LTBiNDEtYWFjYi02MWMxYTJiMjU3MzkiPiA8eG1wTU06SGlzdG9yeT4gPHJkZjpTZXE+IDxyZGY6bGkgc3RFdnQ6YWN0aW9uPSJjcmVhdGVkIiBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOmRjMWFiMTUxLTkzYzUtMGI0MS1hYWNiLTYxYzFhMmIyNTczOSIgc3RFdnQ6d2hlbj0iMjAyNC0wOC0xOVQxNDozNzo1MyswODowMCIgc3RFdnQ6c29mdHdhcmVBZ2VudD0iQWRvYmUgUGhvdG9zaG9wIDI1LjkgKFdpbmRvd3MpIi8+IDwvcmRmOlNlcT4gPC94bXBNTTpIaXN0b3J5PiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/PtZSP9gAACKSSURBVHic7Z1/jFvlme+/z2sHktvJbmCO54Ywdjw0qKkKaqIFFXRT7aCCCipog5aoIEB4PIFyVSpAF0SrgkoEqKxKBdVSLZSMx4hWgMIVQaQiK1IlVYPIqrnqrGBFqqaJczwkke0hs8zszdzEfp/7h+3B9vjHOcfnnNfH837+mbF9zvs8x4+fc94fz/s8xMzwE+GrNC3QC6jTAbFkYcmvykwZHc+zLbCZIDeENj2pk7AqDMwTMFB59YKZijzsqcAWzJop4yLLArsUtkirr7zuV+qWsHYsatFMGBMOEGO0+rpWayvKNbtK0e5kYoyaKYOandjq/U5YcvxYssDd+F6dwNh44TWnJzuxuQDTlnYHRMcKTzW7uvVjhQfaN00Hm74LOLurOL0TdbShkPhq80/oLbvCgC+uMAtg2M6JlfNs39gt+ZWVX2h0bObbRLy30/me3dpaCW6qeXQsf4CI/t5po+0+b/M8zO8D6FsW5Rw2U8bVVg608sRv+oMqCYp+unNw2qJCXwjU/dLAC9Q21AJtY//xc2xwBQ5Q0XWBPTm2cKKA68/DToJd/9F0UthW190ObXttVjtD1e69eWxwhVNFBEY5bEXTOgUOUNHpr1TELps57+TEJUo0EE+cijcV2KnRdgOZdnbPpC/JOBH4o3aKdDi3KZ3s9yyAZx20u6/VB22v0OlVmCnjhpYC2xne/mf8cPdjC6Ypc3Jwc7tGACCaLGTJwoCo7oXX44olArsVLOTcqkx6ZKHV57Fk4azj52Etdu46jmYTAZw2U8YlVoXUCdT90sAL9N2GfuP7N+o3+gKDjitTygAQS+afB9NWEK8F01uC5+5t95jyC0cX2EW/yrUv1Cq2BHq9QOQFlgTFkoUfAvipx7oswY0vomMD8URurRTiVLeCusXV2RIAWJ+ceZ3BtztXyQt4h5mKPGnnDF8WYltNzztkj5kybrF6sKPJGTNlUPV4Jr4jOxF5IzZWuAuE16qfd2qjmy/Szs+17bqvFbITkTcAoHpxrZf86nG6bgy0noZphognjq90IqReYGEjAID55UzaOGL1PKdfbKtpn2aEpRg440RILVLgEwAL5mTkfivH+xEDUUUwi+ecnlzri2bKWGXlHK+nmBsR2cnBJ5wKiyULf3Ei1CmOYz26UHCD3XOdyOrmhtTVzFq3lmslT0i5OZMemqp9L7ItN3DhwIq/KwlkTk1cdMKqjFYzeWcBdH139RtJ8qbpiaG6WIye7mzXIqS8JJMeOt3puNhY/mYQvYtKLJ2tn1g0WThPHSb93cDNm5bjhtx4ljFQzKYMx0tkVtDThkFHX2DQ6fsL1DeZoKMvMOjoCww6+gKDTt9foCvjrvXjn32HJT8N4k0AjjLT49nJwTfdaLtbuhgP5p8H6KHOEnjKnIh0DM/yCtsXGE+cWSNFyf5kMctt5uRQyx07XmFvymKssJ/oi01xdvFjBN+I5ZtMLFl4v5uLAwACwtFkwXFcrEOZnYlsyw2sWi3mXBS6m4Gtje8zUAzJudVuRmdYnTZUMaba1y7a1SoWIpvzT3YrxCHXu/HFeroS6xZWJ32bnuu2Ml7QTZSHK0G/fuFkxrtZlMUuALe5opH7fGymjCvtnFC3zhBNFuawmIGgO6rfdiyZ2wKIP7jRJoAr7J6waMFocuY9At9o5SQh51ZJsfpsq8/b7Cf5I4Cr7CpZSzF8LnLyV+sKVo9fvMlYvTgAqH0Q21l9NVPG1ZVjM1ZlNRIuXpC3c7yjOJl2cSpCznUMRjBTxkg3G6/s4OgxUUQ43uozy92s8v5H27us7SJiyXxLX2oOZUhQHCj3KQEgliy8CwAMjNlpiYE19mTbRwBkay2emTMEjgNAieSjlbdvBoBsykhbbSeanPlf5NIdux22l6OJkCGIrzAY0xNDR2s+mLLaRjRZmCOw5xcHOPJBPsHgxVt9dXxnTnTeNQYA0fH87d1YTpK83M7xti+QQRkAG6qv7QYlENPrdmXWUversYD9C5Scqf5fjVT0Mch81u4Jti8wjGKm+n+73owXtMsh1QrBoKZZWlqxGKtZualYebC7gZAh2xcHACKbGrzJyYnM/AFg48HeFbwjk75o1smZjge8BHyfwZaSyjTQchtzc+Q37Uba12I7KJ0Zh7KTxrVOBdqR5cbNa9GCxfC5iJUTiHBNLFng8jjPGWbKICH4uhYfH2k2QlmXzH/l0uSZr9uV1RAv6mxwyhzamp286B275zUjOlb4ZyJ0SDtWJ73tZhEvUgIqo9lPuvXWnvHCfq5Jzhcg6jal9/LM9hcQ7TQnBu+1cmgsOZMH2GibnKD5ib5fZFdT9/FEbm1J0FYlGyTbIQRfl9kZOeBWe7afM15dZLdpnFrhdA/v+wCu71o4870nJiM7u22nrYxuTo4lC9cDeN/q8cx4JjtpPN6NTLvocMqgoy8w6OgLDDr6AoNO319g3z/o+52+/4X2O9qAAUcbMOBoAwYcbcCAow0YcLQBA442YMDxPY9pLdFk/ioCvQZgo/2zeYGA7SdSkd+4rliA8NWA0bGZp4jYuzUlxXtMVeC5AWPjnz0Glk7KVXSL7a0xQcQzA8aShU/g6NboPipSXvuF6xcWS+YfAuh5t9t1gYyZMkYa31yXzH9FcHgtAJQEMsXPz8/kdw3N+6+eM1w1oPIgL+951kwZLUsmqcDF8gR9b7ylkLjfnLj4ZaUquNHIsjReA2fn5GoVt96uDdjjm7R9x29DOjZgbxZn6A0YmM+mjNV+yLJswOj46SuIwx95qUy/4cfwxUpVzFOxZIF7xngst5kpg4j5XgZ6urvvR9+gXWaVUwDWeq2AHRgY67RrPTqev73bLcFu46UnNskc42oilEUWE62MFT5hwobFfdqEX4tS6AdSlN5Hu5wkzC9brT3SyPpk4e1m+b78g9JmatBWPgjLLde+6DbFXTu+yJRTf1tplghmSXUAoimrGQc64dUPtBNeeeHiMzA6VvjQK+NVGR7PbWh8b4nxxgpPNWRRWHDLeABgpoYOmimDnG5P7zUEAESTuQQRrvFQzgIAEKjxFlm31T6eOL6SCHXLTVarGtmlsv0+7UXbzbBT1MsOAgAIYtKLxhchOgIAxPWrE8R4tPZ1YwYMLx/+lf1xCa/ab8RO0TI7hKPJvKOOgS0YlUQvtL727ROTxovV/yuFCBfxyni9tMzlBmGCeAzwdrjCjCOVv3FqYpbYWO421FSR9CJNi0rDVTOUeUEYlSxhnkL8VwAgonj1x8KMA198LnZV/xUSX3U7DY3qyfYTKeNWr9oWAB30qvEqX6SyqvmxED8K1H+5DIzZKaJpBdXG8zpLoyjJ+o6EF9Sm6qqSTUUOr08W3l58g/llO7kBg4CQc6u8SN9QS9PBtds0G8RLkpcLFn8pa+HeQL0RVR7oVxyOAJznXHMKMz23aDyXB+qqYYlb/QyiEkB5UMsEzx60jRDxI9X/vRqo17Tv05fJD5spg7JpY7c/8srUXVw8kdskhfiT20KqX2J0vPA0MX1JyNKrjUV0vcaLWykDxeyxQc+fc+3wNSlcSdK1n6YHD3nRtlViycIZdJP5mfELc9J4yC19uqXNeqAvs/ZvCTl3tz/pR5sTHS9sJdB3WPIGoJxgGsCfGbwvm4ocbnXe8FjhGwTcRYS7YPMHUR4D07PZycF/7UJ1ABZCKuKJU3EpVhzvVpATGLyXSOwtstx7MhX5s9vtX3rn9LC4YNXXiOS1DHwDoC1+pC1vBQPzoOK12Ym1H1s9x15JrPHC08T4sX3VNE4pz0y1ntzoMuNd7llAPNZNG/0NHWTwREjKvVbKJS1myiTxPTBvWtIa8MCJlPHLhvfcYziRHxWC9rvZZq/DLJ/ITg497Yes9WP57Uz0CgAIeX4kk74k48kYqVwlQt2zxDv4YTMVeUG1FrV4OsgNuCEXJMkr7Rat8BtfZiniiZlrpOAP/ZDlBAaKIGzLTvg7i+IGSjY+Vkov3ey3XAbtlRI7VE8muElP7Vy9NDFzTUjIGwn0dclYU14ABuoXnSkDVEpWETLM/B9ENFUMn5uyU6euX9DpJgOOzhMTcLQBA442YMDRBgw42oABRxsw4GgDBhxtwICjB/IBRntfgNHGCzDaeAFGGy/AaOMFGG28AKONF2C08QKMNl6A0cYLMNp4AUYbL8Bo4wUYbbwAo40XYLTxAow2XoDpmT0N6+44aYT/24V3MvMoMTaBeC1AK8HIMJAhwiGI8FvmzjX/R7WuvYJS48WShZ8C+KHD0/ednZO3Bqk6mNv4brx4IrdWCjoO0Eq32iSIu06kLl52pVN9M148cXylFANn3DRaI1LyddPpyAGv2u81fOmwrE/OvF7OW+2d4QBACNofS+bzXsroJTz3vCV1GnxCkry81/egd4tnxlt330kjXLxArRew3GZODr2lVAcP8eS2GU/k1io3HACQ2FWut9ufuG+8UQ5LIU653q5j6PnYWN73RAd+4EFl6d4skdqsbtK6O04aYuWqr5VflRZKInT61MRFJ1To5wS3q0r/BcCSekW9AoP3EuhGG6ccJhJPnpi4+LeeKdUFblaUvh7A+26113twQcji1V6Vs3GCLgfuACHlZr9TNzfVw41GYsn8k260ExSkEH+qpE9Wiq7j3i0Kx5Jde150vLDVBT2CC4ldlbxrvtP9bZOxq/NBfc/NlapkvtK18VTMW/YoG2PjM67XuWhHV8YbTuTsjJn6H+ZNsWThX/wS56jDEk/kNpWE+KP2uuYwFa+0k6bfKba+/Eu3zwyHJGcleij4pQchDn8EH74iy7fN2PjMn0KSs52P1ABALFnwfLap468jsi03sGq1mPNakX7EPDa4wsvCU209L5rMX9VrhjNTBpUERQH0/CJr7DJve58tn3nlolLkdVEpu9wAAJ/uHJwGsK36Zmys8AIIDyrTqjVXeNl409umyiJS7ehUILEcobb6XQDX+6SSBbwrwNH0tum24Yj5UTNlEBPf4bwN+USnYzLpkQUzZdzQrSx3oee9anmJ8aLJwnm3hUiiAgAQxLfAyNR+ZqYMIsYPOrVxwmatn+xE5A0zZZCQsm9q3TZSZ7zo2MzPvBh4L9ZjZ94OQrzx8xOTxovlL3puFRMONGlij1PZmfTQlJkyCMy3OG2jW+KJ3Fov2q0zXm2BXxVk0iMLoZJccrszU0bXX7w5GdlTeWZOd9uWXWRI3ONFu4vG83JWPIxipsVHS0qEylDovYa3Otats4OZMqIA/rebbXaEyZPotVrP2+iFAAA4H76g6UCVmfY2eXNT7cti+NyVbutjpozbgPpnr7fwFi9aFQAQGy+85kXjVSrjsiUQleqK5w5vz482HuNVHSHz2ODlXrTrJ2XPY9ylQriZGjpY+5okNa5I3+CZcIX10t1CRLbleqagYWNxRTNl7PNKVjxxZo1XbfuFWPk34qeqlQCAxj0FVgbl3SBFSXn0V7cIMO5XrUSZ+pkIu4NyO3gxEdEWoikvmg0rXA1vt3fO8aC8HfFEYaMU8D1QiCU8uf0rS+XBhMVhQmx85pXaz9wYlDcSS+a2qDAcAEDQq54060WjFvnd4n/M22ved3VQDlQ7J0LZ8lZ24mJP4lmUGS9UmtsLlHfQ1r7vxaC8HzonzVBmvEx6ZAEAQucvqBvbuT0oV72PghnPeNW28vRVRLim5qUHg3L6ifttWic7aTzuVdtKjVcOtfgCtwfll26fGXazPQe4/vyuxTfjxROn4l+8osqtUSzeMr0YlIcYSr1OyNBXPW3fy8ZrKYUuXJz6IiyOe9ZU3/NkUM7Y6nqb1slk0hfNeilAeDX6b4RLpcVeJTP/NprM187seDIoB9jofIw3mCljxGsZgsE7vBYCACQo/oVQuY9AixsyvBiUq4RYdozJcQORnTB2+yGolkx6qPZB7tlDndFksdd7pk9MDr3oh6DqM2/BOxGUAQACx6vv1G6D8mJQviiZ5S+9arsVlTALX6gYT3q36NmcxeedVyvlQDnoyKu2m8rrEBTsNqIstH5F202YK2F/oPVNPvb+R+NTh8xvwwE1QwUm3OqJBKIFAOCGXJsMzHu5Ul7FnBj0OOiWCioMB9QYLzth7GbA9bgOAcwCQPbYxXczaC8Yd5vHBldkU8Zqt2W1hHG3Rw3vMFODEW/a7kzdLyaeOLPGixn4kqBoqwgyv3B5J9GseWwwojqIqW6GpTwj4P64LyQ5Gx0vfOh2u3YwJ42HwLSt85FtmRVSXmKmjItUGw5oscWrEj3tSRAuAbtPpAxvnq8WWT9e2M+MUetnyH8yU0OWSghcMn5mfUiW92OUBDIXlmb/M5MemXWgZkdaPmijycJcYyieu/ACi/Dt2Z0XveOdjPbEE2fiJTp/l6DQ1yTzWkF0moHTTPLfFj7nPa1qNkS25QZW/U34TnDpLoBsRUMzME/gn5+d4+e6rQnRtpfkvQFr4ReKZ88/c/J178Z9doneM/tlhIo3AnyzzTydNuCjkvgmJ8nMO3ZxY8mZjwD2dHtuC04z4y0hxN7/+3nx915ULoltn/07KUubCLyFgKvg8TZkC7xkpoz/afVgS+OT9WP5R5joZ8510tjksJkyru50kOXBZWW/9xkAnha20NSxp92Ki+2Zgfj2/KiUtL87nTR2aFUryfG0TiX6+H0AquNEepVZgNIliTc/TQ8esnLCcCI/SiH6RzDub4xkZ2C+cVbKlTm5eCK3SYrQa4o6Nr3CNBM/mp2IvOFWg+UhSej5uqDkmsy6bqfmX27pio8IiVszaeOI14IqfY4/oNwrPmymjKvdnQ0f5XDsshl/d+AogInvcNPD7BIbK7zAhO+7vpQRHf/sCmL5kdvt9gBHhQxd7XVEmB08WYeKjeVuA4m+yD1NhAMnJozrVOvRDM8WEYcT+VEhgjukYOCX2ZTxgGo92uHpCnC5PmwvVfTqjOrnmR18Wb73conJJfaYxwZv7YU1Ojv4WPBXzZbiNuwrCRpTvcLfDf6X2lY0vVZeR8Mz5rHB54LmYa1Ql6R9lMOxL3/2Lw1bmt1kDxMmVESE+0XPZNiPJ86sYSrexkJ8gyVvIMIAQAZqIq2r0dcgzIJ5mpmmQPxXgD/OpiJLktD1O8S83Ga0+gfl25o1ztHGCzDaeAFGGy/AaOMFGG28AKONF2C08QKMNl6A0cYLMNp4AUYbL8Bo4wUYbbwAo40XYLTxAow2XoDRK+kajSL0nVOjUYR2Po1GEdr5NBpFaOfTaBShnU+jUYR2Po1GEdr5NBpFaOfTaBShnU+jUYR2Po1GEdr5NBpFaOfTaBShnU+jUYR2Po1GEdr5NBpFaOfTaBShnU+jUUTPJPRXyfB4bkOIxbcZGEW5JGHcvdZ5gZmmiPgQs9gb4s9/n0mPLLjXviaoLCvniyfOrGFRupOB+wH0QGFcXiCI3STP/yKTXmupmrCmf+hr5xsez20QLH4M8O0ArVStj0WOgvC0OWG8qloRjbf0nfNFxwtbifE8XO06KiVdDJ979OSv1hVUK6Jxl75wvlgytwUQr6F/HK45RDvPfl56OL9raF61KpruCa7zjXI4dtnMKwASqlXxHy4AdIeZMvap1kTjnMA5X6WG+370dglwH+GHzVTkBdVaaOwTGOeLJ86skaL0IbTTNUUyfjA9abyoWg+NdQLhfLHxmVc8rM7eNzAwH5Lym5n00JRqXTSd6WnniybzVwH0IQFh1boECQbtzaYGb6q+vjR55ush4mvApY0MbCSmjSBbk1OnAT4KxhEIOsqSphbmSx/oiZ/u6Fnn00+7oMEFkNgN8BvmXwd/jwNUVK1Rr9N7zleexfwIemzXFxCwm6TcobvCS+kp51t330kjXLzgLwDWqNZF4xlpIeWPMumh06oVUU3POF9lNvM4tOMtG5hxQIbo7k93Dk6r1kUFveF85a5mFsBa1apolPGseWzwieU0VuwJ54slC+8CuFm1Hpqe4LCQ8pbl0C1V7nzrx/LbmegV1Xpoeo4jQsrr+tkJ1TrfKIejl82cIWBAqR6anoUZB7LHB2/ox+6oEucrx2fS/QB9D3qcp7EAMd97YjKyU7UebuKL88UTuU0sxE8Y2OqHPE3f8rF5bHBzvzwFvXG+UQ6vv+yzByX4Sd2l1LgJA0WQ2JyduPhj1bp0i6vOFxv/7HvM8jntcBqvYcKt2Qljt2o9uqFr54sncmtlKPQemDe5oE+/Ur1L90DSpv6BIceyqaG0aj2c4tj5YsncFoZ4Tz/l2rLHTBm3NPsgnji+UorVW0D0XTDfDD3x5JQbgrqj37bzVbb57NdO1wGiKXNicLPt88rRPqMg+i4z366/5/YwUAxJGQ3ieqBl56sEPf8Bvb3b4DRA/wTmOIjuBNhQpYeQcyNuJseNJ87EpTh/PyDugX5KNkAHzdTgN1VrYRdLzhdLFn4I4Kce69I1DIxlU0a68f14orCxJHg7QdzT6JAMzAPYR8CNANzI7blQDJ+L+pHqL749P8qSHtRLOMEc/7V1vsq45CMAG3zSpyuklDdNp4f2Vl/HkoUsgOF25zDLJ7KTQ0/XvlfpWicIuBM2d1kIia9m0sYRO+e4RTyR2ySF+BmA61XIV0zGTBkjqpWwQ0vnC2IKByn5uul05ED1dSxZ4E7nMPjqbCpyuNNxsWThjyjXcWhHzwz+44njK0ti4GmAHgySDbuC+RZzMrJHtRpWaVqlKDaWv5lAfwyc0UK8uC9s3X0nrYz3Zq05Xv4hdHA8BsZ6xfEAIJMeWcimIo9kU8aKYvhcBOAPVOvkNUTiTtU62GGJc0XHC1vBeFuFMt0SLpUWw44uOEcDskMBNALtbX9EebwogefbtsPyCXOyd8cblfHnFoxyODoys4cI31atkxcwcI1qHexQ9/OMJXNbKKCOBwCZ9CWZ6v9FhOMdT2D5u06HSIH327fBL59oGDP2LAeomJ00bmTiO1Sr4g0cjyfOrFGthVUWnS+yLTcAUPsfWp9BzG3HB7HxmVfQfsJmjzkZud9drbwnOxF5g0BvqNbDGxbWqNbAKovdzlWrxdtwZ6pdEZSpeyUo3uH4j9stzEbH87e3TV1YXkRvGr0SDDjAtu4PBFCeYEHfTU+3/3Exo+V4b919Jw0wvdbm9NOi9Pm1jlVTTHRs5mf9uzYYCkzV3/KTT4inwB1n5XsaZs7UvqYOUSDMpZbjvXDxgvfQeqZ3oRg+d+XJXwWvtHMsWbiegbcJ3K8ha7NBCjMLR5P5q/pzRwL991afMFCsXYyvJTpWeAptlhWExOYgFaqMbMsNrFwtXqPKk0550h5PoZ5Z6rFCmED/qFoJNyBCpuGtNt3O5kYqF9nE423E3KAqesUulYKhu7Cc4kAZb6pWwQ5hgLYAwe5yNoMZcWpxmyfIf218L544vlJCvNuyvXLcaM/fWeOJwkYp+A8AqQoqV8WsOTn4lmol7CDQIfYxOPAJy0dSaIkTsVj9OlrEcRLLJ5oFbPca65Mzr0uBT5ah4wHgHao1sEsY4LhqJbyAiOItnujTjfk/1o8VHmg5+xeARfRKqv1PGLx8upj1fBzE6rwCoMBMHrSDG9b50GoTKtWHlA2P5zYw4Z9bNNvzi+g1NS6Wq+NBkrxVtQ5OECjvZws+xA1T/y020krUjfcEi+ZRPURTrVJA9BIyJPdjOReXYdw9PTF0VLUaThAgPqhaCTfgEhbXdy7dPtNyHCtYLI73KuFj8SaHBWIRff1Yfnt/LhNZ5kfmpPFr1Uo4RTD3x1aTMHi2+v+K4rmmC+TMOJRJXzQLVHdvNA0fWyiGz13pZgoIr2Ci76nWQR38sJkynlWtRTeIkJxPM9AHGYBLs9X/Wu9oKK/vrbvvpEHMrzc7ImCL6J029/YlTHxHECdYGhGZ9MgCCC+pVqRb/uu/Qh0dRjJ+CwDh4oVvA9RsET4wi+jLEQbmhTw/kp2I9MWODAEAC5/LHwHo+W5WO/K7hhYnjprtaGBg/tP04KFYMv8kwFuafN5TO9GtsWSGt39hvJNNGatr92wGHQGUf7jE/APVynRBXVlhAq9pPIBAe8shV/STJZ8FZBG9EWYEKqLDCQzMM/hqc9LYqloXt1ncTFsuv0Rphbp0wZKqNWuaHPQBEFq6Sz8Ai+itWJgv7UDAeyzt4YezKWO1lTw7QaQujYSZGhwD0ZQiXRzTuJ0IoPVNjnqsydpfzy+ityO/a2heEgVygbkdzPxzM2VQP0yqtGNJiiFzYnBzEB3QAvURIAFZRO/E9MTgXiYE3gEZKFbG3ZSdjDyiWh8/aJrfy5wY3MyEQ34r45Sl24laBlkvEGivkHKzozoKPUp2wtgt5PkRDmS0Eh0sCYpmU8aKII67u6Ht3srYWOEFEB70S5kuOH12Tl5eO+O5XIklc88C4jHVerSFaEqUSmOZ9NCUalVU0nFjc6UU2P6AJNCdJdAjJ1KDE6oVUU2POeECGC8XV5x7OkABDJ5jLavAKIejI4V9RPT3HuvjKgTsJil3LOc77KXbZ4ZDJX4RhH/wTSjRFFi+KmQ4XQ3n0yzFVkqP8i5p7Edwt698DBIvnv28+Jvl2kWNjn92BbiUINA/oLsCOEcBOsiQ/8bE+7rZWRBPnIpz6MKvSeaNBL6CGXEC4kwYtt7j4gUwnWYgQ8A0BD5mGTpSouKRk6nIn53q5iWO8un0U1VaBuYJ2Evg3ST5d0HKftWrRLblBlb97QVfARevAGMjyuWwr0DzHSS+w0ARjIMg2hOS/FtVIYVdJbNaJkl6joJwCKDDUoqpMM/+eyY9MqtaKT+IJ46vOS/WrBeMOEhuAHOcCHEwNjBhQ0DmAexyGCR2+tE7ciWTXGRbbmDVanoDoO+40V7AmQVTBsTTDBQIOM2MeQKmGaFZBmYBoCTKyyMXls7/PydP20vvnB6WK78UAoAVRIYs8YAQpTBkJScP8QizCIF4mIABZhhEGGbwGlqWOV66Yo+U/PPa8nNu4Hoax3git0mGQpPLfJOnpo9hxgFm3tGtM3qaQzWeOBWXYsVzAPoiN6hG0wgDRRBeCpVCT9id2fU1gXE8MXMNC36sf+sEaFTCQJGADDOmy1FPNAvI/wQAZsyD6pOFlUsK8Epm8SUiNpgRJ0FrmHlDF5OJ+4Q8f6+VrU9qs4ePcnj4y59dLxjfBfhG9PfEjcY5R5iwjyT9XorSlKqESfHE8ZVSfOkqQGxhxrdB2NJh0mlfSdDYpzsHp5t92JOp+yvp8D5C3yT01VjgKDPeBPHuQG4hGuVw7LKZURDuYcbWJk/Ol4Sce7g2N1BPOl+VAMWWaqwzC+Y3BYt0Jj0YmOB9p0ST+auI6EEwbgOwEuACQHeYKWNfTzsfAMQTubVSiD9Bd0kDR2WXxashiRd1bpwy8URubSkkHgDoWz3vfFWGE/lREvR+ny7s9gdEUwzekZ0wdqtWJQgExvmqxMZytzGJ17UTqoeA3RL8TCDHaD1A4JyvSiXI+z30SLzgMuA0gF8IGXpJ71Rwh8A63yKjHI5dVnicQT/WT0O3oAKYfyNYppfzdiyvCb7z1RDZlhtYNSCeZsL3tSNahQ4Sy3eI+dd6R4e/9JXzNRLfnh9lpp8wY1S1LoqZBbAPjHfOzsvdy3UvY6/R187XyPB4bgMx3U+g76KvFvCpAPAhAB+UJB34NHPxYRxYkstU02MsK+drRXT89BXEoesB8T8AvgbqHXMWwFECHWVwhpj/ysRHiuHiEZ0DpX8g5qalkzUajcc0zdup0Wi8RzufRqMI7XwajSK082k0itDOp9EoQjufRqMI7XwajSK082k0itDOp9EoQjufRqMI7XwajSK082k0itDOp9EoQjufRqMI7XwajSK082k0itDOp9Eo4v8DFeIo4yTRE98AAAAASUVORK5CYII=")
-    icon_path = os.path.join(tempfile.gettempdir(), "icon.png")
-    with open(icon_path, "wb") as f:
-        f.write(icon)
-
-    icon = tk.PhotoImage(file=icon_path)
-    root.iconphoto(True, icon)
-    setattr(root, "_icon_ref", icon) # 为防止图片被垃圾回收，保存引用
-
-set_icon() # 设置窗口图标
-
-def on_closing() -> None: # 处理窗口关闭事件
-    global app_closing
-
-    if app_closing:
-        return
-
-    if not all(state["finished"] for state in download_states): # 当正在下载时，询问用户
-        if not messagebox.askokcancel("提示", "下载任务未完成，是否退出？"):
-            return
-
-    app_closing = True
-
-    current_process = psutil.Process(os.getpid()) # 获取自身的进程 ID
-    child_processes = current_process.children(recursive=True) # 获取自身的所有子进程
-
-    for child in child_processes: # 结束所有子进程
-        try:
-            child.terminate() # 结束进程
-        except Exception: # 进程可能已经结束
-            pass
-
-    try:
-        root.destroy()
-    except Exception:
-        pass
-
-root.protocol("WM_DELETE_WINDOW", on_closing) # 注册窗口关闭事件的处理函数
-
-# 创建一个容器框架
-container_frame = ttk.Frame(root)
-container_frame.pack(anchor="center", expand=True, fill="both", padx=int(40 * scale), pady=int(20 * scale)) # 在容器的中心位置放置，允许组件在容器中扩展，水平外边距 40，垂直外边距 40
-
-title_label = ttk.Label(container_frame, text="国家中小学智慧教育平台 资源下载工具", font=(ui_font_family, 16, "bold")) # 添加标题标签
-title_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
-
-description = """\
+# 主界面上方的功能说明文字
+DESCRIPTION = """\
 📌 请在右侧的文本框中输入一个或多个资源页面的网址（每个网址一行）。
 🔗 资源页面网址示例：
       https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=...
 📝 您也可以直接在左侧的列表中选择资源。
 📥 点击 “下载” 按钮后，程序会解析并下载资源。
 ❗ 注：为了更可靠地下载，建议点击 “设置 Token” 按钮，参照里面的说明完成设置。"""
-description_label = ttk.Label(container_frame, text=description, font=(ui_font_family, 9)) # 添加描述标签
-description_label.pack(pady=int(5 * scale), anchor="w") # 设置垂直外边距（跟随缩放）
 
-paned = ttk.PanedWindow(container_frame, orient="horizontal") # 创建水平分割窗口
-paned.pack(fill="both", expand=True)
-treeview_pane = ttk.Frame(paned) # 创建树视图的子框架，放在分割窗口的左侧
-treeview_pane.columnconfigure(0, weight=1)
-treeview_pane.rowconfigure(1, weight=1)
-text_pane = ttk.Frame(paned) # 创建文本框的子框架，放在分割窗口的右侧
-text_pane.columnconfigure(0, weight=1)
-text_pane.rowconfigure(1, weight=1)
-paned.add(treeview_pane)
-paned.add(text_pane)
-paned.update_idletasks()
-root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%（不能使用 ui_call）
 
-treeview_label = ttk.Label(treeview_pane, text="资源列表", font=(ui_font_family, 10, "bold")) # 添加树视图标签
-treeview_label.grid(row=0, column=0, sticky="w")
-style = ttk.Style(root)
-style.configure("Custom.Treeview", rowheight=int(30 * scale), font=(ui_font_family, 9))
-treeview = ttk.Treeview(treeview_pane, style="Custom.Treeview", show="tree", selectmode="browse") # 创建树视图，使用自定义样式，隐藏列标题，设置选择模式为单选
-treeview.grid(row=1, column=0, sticky="nsew")
-treeview_scrollbar = ttk.Scrollbar(treeview_pane, orient="vertical", command=treeview.yview)
-treeview.configure(yscrollcommand=lambda f, l: auto_hide_scrollbar(treeview_scrollbar, f, l))
-treeview_scrollbar.grid(row=1, column=1, sticky="ns")
-# BUG: 水平滚动条不起作用
-# hsb = ttk.Scrollbar(treeview_pane, orient="horizontal", command=treeview.xview)
-# treeview.configure(xscrollcommand=lambda f, l: auto_hide_scrollbar(hsb, f, l))
-# hsb.grid(row=2, column=0, sticky="ew")
+def main() -> None: # 程序入口：初始化界面并进入主循环
+    # 下列变量在本函数中创建，但前面定义的函数会通过全局作用域访问它们，
+    # 因此必须声明为 global，否则相关功能会在运行时抛出 NameError
+    global root, ui_font_family, url_text, bookmark_var
+    global download_btn, download_progress_bar, progress_label
 
-url_label = ttk.Label(text_pane, text="资源页面网址", font=(ui_font_family, 10, "bold")) # 添加 URL 标签
-url_label.grid(row=0, column=0, sticky="w")
-url_text = tk.Text(text_pane, wrap="word", undo=True, font=(ui_font_family, 9), relief="solid") # 添加 URL 输入框
-url_text.grid(row=1, column=0, sticky="nsew")
-bind_context_menu(url_text) # 为 URL 输入框创建右键菜单
-bind_tab_navigation(url_text) # 绑定 Tab 键导航
-text_scrollbar = ttk.Scrollbar(text_pane, orient="vertical", command=url_text.yview)
-url_text.configure(yscrollcommand=lambda f, l: auto_hide_scrollbar(text_scrollbar, f, l))
-text_scrollbar.grid(row=1, column=1, sticky="ns")
-url_text.focus()
+    scale: float | None = None
 
-tree_item_data: dict[str, dict] = {} # 构建树视图数据的字典，键为树项 ID，值为资源数据
+    # 在 Windows 上进行高 DPI 适配
+    if os_name == "Windows" and win32print and win32gui and win32con and win32api and ctypes:
+        scale = round(win32print.GetDeviceCaps(win32gui.GetDC(0), win32con.DESKTOPHORZRES) / win32api.GetSystemMetrics(0), 2) # 获取当前的缩放因子
 
-def build_tree_items(parent: str, items: dict[str, dict], open_sub: bool) -> None: # 递归构建树视图项
-    for option_id, option_data in items.items():
-        item_id = f"{parent}:{option_id}" if parent else option_id
-        tree_item_data[item_id] = option_data
-        treeview.insert(parent, "end", iid=item_id, text=option_data["display_name"], open=open_sub) # 插入树项，设置显示名称，初始展开状态
-        children: dict[str, dict] = option_data.get("children", {})
-        if children: # 如果有子项，递归构建子树项
-            build_tree_items(item_id, children, open_sub=False)
+        # 调用 API 设置成由应用程序缩放
+        try: # Windows 8.1 或更新
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception: # Windows 8 或更老
+            ctypes.windll.user32.SetProcessDPIAware()
 
-def on_tree_select(event: tk.Event) -> None: # 处理树视图选择事件
-    selection = treeview.selection()
-    if not selection:
-        return
+    # 尝试加载已保存的 Access Token
+    load_access_token()
 
-    def load_icon(item_id: str, url: str) -> None: # 加载树项图标
+    # 获取资源列表
+    try:
+        resource_list = resource_helper().fetch_resource_list()
+    except Exception as e:
+        print_error(e)
+        resource_list = {}
+        messagebox.showwarning("警告", "获取资源列表失败，请手动填写资源链接，或重新打开本程序") # 弹出警告窗口
+
+    # GUI
+    root = tk.Tk()
+
+    ui_font_family = pick_ui_font_family()
+
+    if not scale: # 若获取缩放因子失败，通过 Tkinter 估算缩放因子
         try:
-            resp = session.get(url)
-            if resp.ok:
-                image = Image.open(io.BytesIO(resp.content))
-                image.thumbnail((int(30 * scale), int(30 * scale)), Image.Resampling.LANCZOS)
-                photo = ImageTk.PhotoImage(image)
-                treeview.item(item_id, image=photo)
-                setattr(treeview, f"_image_ref_{item_id}", photo) # 为防止图片被垃圾回收，保存引用
-        except Exception as e:
-            print_error(e)
+            scale: float = round(root.winfo_fpixels("1i") / 96.0, 2)
+        except Exception:
+            scale = 1.0
+    root.tk.call("tk", "scaling", scale / 0.75) # 设置缩放因子
+    root.title(f"国家中小学智慧教育平台 资源下载工具 {VERSION}") # 设置窗口标题
 
-    item = selection[0]
-    children = treeview.get_children(item)
-    if children: # 如果选中的项有子项，则加载子项的预览图，否则插入 URL
-        for child in children: # 遍历子项，设置子项的图片
-            if not treeview.item(child)["image"] and tree_item_data[child].get("custom_properties", {}).get("thumbnails"):
-                thread_it(load_icon, child, tree_item_data[child]["custom_properties"]["thumbnails"][0])
-    else:
-        resource_data = tree_item_data.get(item)
-        if not resource_data:
+    def set_icon() -> None: # 设置窗口图标
+        # 下面的 base64 字符串即 assets/window_icon.png 的内容（内嵌于此以避免打包时附带资源文件）
+        # 更换图标时需重新生成这段字符串，具体步骤见 assets/README.md
+        icon = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAN8AAADfCAYAAAEB/ja6AAAACXBIWXMAAAsTAAALEwEAmpwYAAAE7mlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgOS4xLWMwMDIgNzkuYTZhNjM5NiwgMjAyNC8wMy8xMi0wNzo0ODoyMyAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iIHhtbG5zOnN0RXZ0PSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VFdmVudCMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjkgKFdpbmRvd3MpIiB4bXA6Q3JlYXRlRGF0ZT0iMjAyNC0wOC0xOVQxNDozNzo1MyswODowMCIgeG1wOk1vZGlmeURhdGU9IjIwMjQtMDgtMTlUMTQ6Mzg6MjQrMDg6MDAiIHhtcDpNZXRhZGF0YURhdGU9IjIwMjQtMDgtMTlUMTQ6Mzg6MjQrMDg6MDAiIGRjOmZvcm1hdD0iaW1hZ2UvcG5nIiBwaG90b3Nob3A6Q29sb3JNb2RlPSIzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOmRjMWFiMTUxLTkzYzUtMGI0MS1hYWNiLTYxYzFhMmIyNTczOSIgeG1wTU06RG9jdW1lbnRJRD0i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")
+        icon_path = os.path.join(tempfile.gettempdir(), "icon.png")
+        with open(icon_path, "wb") as f:
+            f.write(icon)
+
+        icon = tk.PhotoImage(file=icon_path)
+        root.iconphoto(True, icon)
+        setattr(root, "_icon_ref", icon) # 为防止图片被垃圾回收，保存引用
+
+    set_icon() # 设置窗口图标
+
+    def on_closing() -> None: # 处理窗口关闭事件
+        global app_closing
+
+        if app_closing:
             return
 
-        resource_type = resource_data.get("resource_type_code") or "assets_document"
-        content_id = resource_data.get("content_id") or item.split(":")[-1]
-        if resource_type == "teachingmaterials":
-            url = f"https://basic.smartedu.cn/syncClassroom?defaultTag={"%2F".join(item.split(':')[1:])}"
-        else:
-            url = f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={content_id}&catalogType=tchMaterial&subCatalog=tchMaterial"
+        if not all(state["finished"] for state in download_states): # 当正在下载时，询问用户
+            if not messagebox.askokcancel("提示", "下载任务未完成，是否退出？"):
+                return
 
-        url_text_content = url_text.get("1.0", "end")[:-1] # 获取 URL 输入框的内容，去掉最后一个换行符
-        if url in url_text_content.splitlines(): # 如果 URL 已经存在于输入框中，则不再插入
+        app_closing = True
+
+        current_process = psutil.Process(os.getpid()) # 获取自身的进程 ID
+        child_processes = current_process.children(recursive=True) # 获取自身的所有子进程
+
+        for child in child_processes: # 结束所有子进程
+            try:
+                child.terminate() # 结束进程
+            except Exception: # 进程可能已经结束
+                pass
+
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+    root.protocol("WM_DELETE_WINDOW", on_closing) # 注册窗口关闭事件的处理函数
+
+    # 创建一个容器框架
+    container_frame = ttk.Frame(root)
+    container_frame.pack(anchor="center", expand=True, fill="both", padx=int(40 * scale), pady=int(20 * scale)) # 在容器的中心位置放置，允许组件在容器中扩展，水平外边距 40，垂直外边距 40
+
+    title_label = ttk.Label(container_frame, text="国家中小学智慧教育平台 资源下载工具", font=(ui_font_family, 16, "bold")) # 添加标题标签
+    title_label.pack(pady=int(5 * scale)) # 设置垂直外边距（跟随缩放）
+
+    description_label = ttk.Label(container_frame, text=DESCRIPTION, font=(ui_font_family, 9)) # 添加描述标签
+    description_label.pack(pady=int(5 * scale), anchor="w") # 设置垂直外边距（跟随缩放）
+
+    paned = ttk.PanedWindow(container_frame, orient="horizontal") # 创建水平分割窗口
+    paned.pack(fill="both", expand=True)
+    treeview_pane = ttk.Frame(paned) # 创建树视图的子框架，放在分割窗口的左侧
+    treeview_pane.columnconfigure(0, weight=1)
+    treeview_pane.rowconfigure(1, weight=1)
+    text_pane = ttk.Frame(paned) # 创建文本框的子框架，放在分割窗口的右侧
+    text_pane.columnconfigure(0, weight=1)
+    text_pane.rowconfigure(1, weight=1)
+    paned.add(treeview_pane)
+    paned.add(text_pane)
+    paned.update_idletasks()
+    root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%（不能使用 ui_call）
+
+    treeview_label = ttk.Label(treeview_pane, text="资源列表", font=(ui_font_family, 10, "bold")) # 添加树视图标签
+    treeview_label.grid(row=0, column=0, sticky="w")
+    style = ttk.Style(root)
+    style.configure("Custom.Treeview", rowheight=int(30 * scale), font=(ui_font_family, 9))
+    treeview = ttk.Treeview(treeview_pane, style="Custom.Treeview", show="tree", selectmode="browse") # 创建树视图，使用自定义样式，隐藏列标题，设置选择模式为单选
+    treeview.grid(row=1, column=0, sticky="nsew")
+    treeview_scrollbar = ttk.Scrollbar(treeview_pane, orient="vertical", command=treeview.yview)
+    treeview.configure(yscrollcommand=lambda f, l: auto_hide_scrollbar(treeview_scrollbar, f, l))
+    treeview_scrollbar.grid(row=1, column=1, sticky="ns")
+    # BUG: 水平滚动条不起作用
+    # hsb = ttk.Scrollbar(treeview_pane, orient="horizontal", command=treeview.xview)
+    # treeview.configure(xscrollcommand=lambda f, l: auto_hide_scrollbar(hsb, f, l))
+    # hsb.grid(row=2, column=0, sticky="ew")
+
+    url_label = ttk.Label(text_pane, text="资源页面网址", font=(ui_font_family, 10, "bold")) # 添加 URL 标签
+    url_label.grid(row=0, column=0, sticky="w")
+    url_text = tk.Text(text_pane, wrap="word", undo=True, font=(ui_font_family, 9), relief="solid") # 添加 URL 输入框
+    url_text.grid(row=1, column=0, sticky="nsew")
+    bind_context_menu(url_text) # 为 URL 输入框创建右键菜单
+    bind_tab_navigation(url_text) # 绑定 Tab 键导航
+    text_scrollbar = ttk.Scrollbar(text_pane, orient="vertical", command=url_text.yview)
+    url_text.configure(yscrollcommand=lambda f, l: auto_hide_scrollbar(text_scrollbar, f, l))
+    text_scrollbar.grid(row=1, column=1, sticky="ns")
+    url_text.focus()
+
+    tree_item_data: dict[str, dict] = {} # 构建树视图数据的字典，键为树项 ID，值为资源数据
+
+    def build_tree_items(parent: str, items: dict[str, dict], open_sub: bool) -> None: # 递归构建树视图项
+        for option_id, option_data in items.items():
+            item_id = f"{parent}:{option_id}" if parent else option_id
+            tree_item_data[item_id] = option_data
+            treeview.insert(parent, "end", iid=item_id, text=option_data["display_name"], open=open_sub) # 插入树项，设置显示名称，初始展开状态
+            children: dict[str, dict] = option_data.get("children", {})
+            if children: # 如果有子项，递归构建子树项
+                build_tree_items(item_id, children, open_sub=False)
+
+    def on_tree_select(event: tk.Event) -> None: # 处理树视图选择事件
+        selection = treeview.selection()
+        if not selection:
             return
-        if not url_text_content or url_text_content[-1] == "\n": # URL 输入框为空或最后一个字符为换行符时，插入的内容前面不加换行
-            url_text.insert("end", url)
+
+        def load_icon(item_id: str, url: str) -> None: # 加载树项图标
+            try:
+                resp = session.get(url)
+                if resp.ok:
+                    image = Image.open(io.BytesIO(resp.content))
+                    image.thumbnail((int(30 * scale), int(30 * scale)), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(image)
+                    treeview.item(item_id, image=photo)
+                    setattr(treeview, f"_image_ref_{item_id}", photo) # 为防止图片被垃圾回收，保存引用
+            except Exception as e:
+                print_error(e)
+
+        item = selection[0]
+        children = treeview.get_children(item)
+        if children: # 如果选中的项有子项，则加载子项的预览图，否则插入 URL
+            for child in children: # 遍历子项，设置子项的图片
+                if not treeview.item(child)["image"] and tree_item_data[child].get("custom_properties", {}).get("thumbnails"):
+                    thread_it(load_icon, child, tree_item_data[child]["custom_properties"]["thumbnails"][0])
         else:
-            url_text.insert("end", f"\n{url}")
-        url_text.see("end") # 滚动到文本框底部
+            resource_data = tree_item_data.get(item)
+            if not resource_data:
+                return
 
-build_tree_items("", resource_list, open_sub=True) # 构建树视图项，初始展开一级目录
-treeview.bind("<<TreeviewSelect>>", on_tree_select)
+            resource_type = resource_data.get("resource_type_code") or "assets_document"
+            content_id = resource_data.get("content_id") or item.split(":")[-1]
+            if resource_type == "teachingmaterials":
+                url = f"https://basic.smartedu.cn/syncClassroom?defaultTag={"%2F".join(item.split(':')[1:])}"
+            else:
+                url = f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={content_id}&catalogType=tchMaterial&subCatalog=tchMaterial"
 
-button_frame = ttk.Frame(container_frame)
-button_frame.pack(fill="x", pady=int(5 * scale))
+            url_text_content = url_text.get("1.0", "end")[:-1] # 获取 URL 输入框的内容，去掉最后一个换行符
+            if url in url_text_content.splitlines(): # 如果 URL 已经存在于输入框中，则不再插入
+                return
+            if not url_text_content or url_text_content[-1] == "\n": # URL 输入框为空或最后一个字符为换行符时，插入的内容前面不加换行
+                url_text.insert("end", url)
+            else:
+                url_text.insert("end", f"\n{url}")
+            url_text.see("end") # 滚动到文本框底部
 
-# 按钮：设置 Token
-token_btn = ttk.Button(button_frame, text="设置 Token", command=show_access_token_window)
-token_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+    build_tree_items("", resource_list, open_sub=True) # 构建树视图项，初始展开一级目录
+    treeview.bind("<<TreeviewSelect>>", on_tree_select)
 
-# 复选框：添加书签
-bookmark_var = tk.BooleanVar(value=True)
-bookmark_checkbox = ttk.Checkbutton(button_frame, text="添加书签", variable=bookmark_var)
-bookmark_checkbox.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+    button_frame = ttk.Frame(container_frame)
+    button_frame.pack(fill="x", pady=int(5 * scale))
 
-# 按钮：下载
-download_btn = ttk.Button(button_frame, text="下载", command=download)
-download_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+    # 按钮：设置 Token
+    token_btn = ttk.Button(button_frame, text="设置 Token", command=show_access_token_window)
+    token_btn.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
-# 按钮：解析并复制
-copy_btn = ttk.Button(button_frame, text="解析并复制", command=parse_and_copy)
-copy_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
+    # 复选框：添加书签
+    bookmark_var = tk.BooleanVar(value=True)
+    bookmark_checkbox = ttk.Checkbutton(button_frame, text="添加书签", variable=bookmark_var)
+    bookmark_checkbox.pack(side="left", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
-# 下载进度条
-download_progress_bar = ttk.Progressbar(button_frame, length=125 * scale, mode="determinate") # 添加下载进度条
-download_progress_bar.pack(side="bottom", pady=int(10 * scale), ipady=int(5 * scale)) # 设置垂直外边距、进度条高度（跟随缩放）
+    # 按钮：下载
+    download_btn = ttk.Button(button_frame, text="下载", command=download)
+    download_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
-# 下载进度标签
-progress_label = ttk.Label(button_frame, text="等待下载", anchor="center", font=(ui_font_family, 9)) # 初始时文本为空，居中
-progress_label.pack(side="bottom", pady=int(5 * scale)) # 设置垂直外边距、标签高度（跟随缩放）
+    # 按钮：解析并复制
+    copy_btn = ttk.Button(button_frame, text="解析并复制", command=parse_and_copy)
+    copy_btn.pack(side="right", padx=int(5 * scale), pady=int(5 * scale), ipady=int(5 * scale))
 
-center_window(root) # 让窗口居中
-root.mainloop() # 开始主循环
+    # 下载进度条
+    download_progress_bar = ttk.Progressbar(button_frame, length=125 * scale, mode="determinate") # 添加下载进度条
+    download_progress_bar.pack(side="bottom", pady=int(10 * scale), ipady=int(5 * scale)) # 设置垂直外边距、进度条高度（跟随缩放）
+
+    # 下载进度标签
+    progress_label = ttk.Label(button_frame, text="等待下载", anchor="center", font=(ui_font_family, 9)) # 初始时文本为空，居中
+    progress_label.pack(side="bottom", pady=int(5 * scale)) # 设置垂直外边距、标签高度（跟随缩放）
+
+    center_window(root) # 让窗口居中
+    root.mainloop() # 开始主循环
+
+
+if __name__ == "__main__":
+    main()
