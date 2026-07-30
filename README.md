@@ -48,6 +48,28 @@ yay -S tchmaterial-parser
 
 感谢 [@iamzhz](https://github.com/iamzhz) 为本工具制作了发行包（[#26](../../issues/26)）！
 
+### 从源码运行
+
+若您想体验最新的改动，或是希望参与开发，可以直接从源码运行本工具。需要 **Python 3.10 或更高版本**（代码中使用了 `X | Y` 形式的类型注解）。
+
+```sh
+git clone https://github.com/happycola233/tchMaterial-parser.git
+cd tchMaterial-parser
+pip install -r requirements.txt
+python src/tchmaterial_parser.py
+```
+
+> [!NOTE]
+> 本工具使用 Tkinter 构建图形界面。Windows 与 macOS 的官方 Python 通常已自带，而部分 Linux 发行版需要单独安装，例如在 Debian/Ubuntu 上执行 `sudo apt install python3-tk`。
+
+若您想自行打包为可执行文件，可以在安装 `pyinstaller` 后执行：
+
+```sh
+pyinstaller ./tchMaterial-parser.spec
+```
+
+产物位于 `dist/` 目录中。
+
 ## 🛠️ 使用方法
 
 ### 1. ⌨️ 输入电子课本链接
@@ -146,6 +168,13 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 ## 🤝 贡献指南
 
 如果您发现 Bug 或有改进建议，欢迎提交 **Issue** 或 **Pull Request**，让我们一起完善本工具！
+
+## ⚖️ 免责声明
+
+- 本工具**仅提供下载上的便利**，不存储、不托管、不分发任何教材内容，所有资源均直接来自[国家中小学智慧教育平台](https://basic.smartedu.cn/)。
+- 所下载资源的**版权归原平台及相关权利人所有**，请仅用于个人学习与教学参考，**请勿用于商业用途或二次分发**。
+- 使用本工具时请遵守该平台的服务条款及您所在地区的法律法规。因使用本工具产生的任何后果由使用者自行承担。
+- 本项目与国家中小学智慧教育平台**没有任何隶属或合作关系**。
 
 ## 📜 许可证
 
