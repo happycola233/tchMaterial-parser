@@ -5,7 +5,7 @@ import os
 is_mac = sys.platform.startswith('darwin')
 
 a = Analysis(
-    ['src/tchMaterial-parser.pyw'],
+    ['src/tchMaterial-parser.py'],
     pathex=[],
     binaries=[],
     datas=[],
