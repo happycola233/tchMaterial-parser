@@ -1,6 +1,6 @@
-Pillow
-psutil
-pypdf
-pyperclip
-pywin32; sys_platform == "win32"
-requests
+Pillow>=10,<12
+psutil>=5.9,<8
+pypdf>=5,<6
+pyperclip>=1.8,<2
+pywin32>=306; sys_platform == "win32"
+requests>=2.31,<3
