@@ -67,13 +67,13 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
             scale = 1.0
 
     # 在 macOS 上，Tk 通常把 DPI 报成 72（即 scale 为 0.75），需把 scaling 除以 0.75 以补偿；
-    # 其它平台直接使用检测到的缩放因子（至少 1.0）。
+    # 其它平台直接使用检测到的缩放因子（至少 1.0）
     if os_name == "Darwin":
         root.tk.call("tk", "scaling", max(scale / 0.75, 1.0))
     else:
         root.tk.call("tk", "scaling", max(scale, 1.0))
 
-    # 界面元素的尺寸另算：macOS 会自行处理 Retina 缩放，故固定取 1。
+    # 界面元素的尺寸另算：macOS 会自行处理 Retina 缩放，故固定取 1
     runtime.ui_scale = 1.0 if os_name == "Darwin" else max(scale, 1.0)
     root.title(f"国家中小学智慧教育平台 资源下载工具 {__version__}") # 设置窗口标题
 
@@ -149,7 +149,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     subtitle_label = ttk.Label(title_frame, text=f"{__version__} · 批量下载 · PDF 书签 · 免费开源", style="Caption.TLabel") # 添加副标题标签
     subtitle_label.pack(anchor="w")
 
-    theme_icons: dict[str, ImageTk.PhotoImage] = {} # 缓存两个主题图标，并同时防止 Tk 图片被垃圾回收
+    theme_icons: dict[str, ImageTk.PhotoImage] = {} # 缓存 3 个主题图标，并同时防止 Tk 图片被垃圾回收
 
     def update_theme_button() -> None: # 更新按钮文字与图标，使其表示点击后将切换到的主题
         if theme.switched_theme not in theme_icons:
@@ -215,7 +215,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
             if int(label.cget("wraplength")) != wraplength:
                 label.config(wraplength=wraplength)
 
-    description_card.bind("<Configure>", on_description_resize)
+    # 此处不立即绑定上面的事件，而是在所有元素加载完毕后再绑定（文件末尾）
 
     paned = ttk.PanedWindow(container_frame, orient="horizontal") # 创建水平分割窗口（在底部各栏之后才打包，见文件末尾）
     treeview_pane = ttk.Frame(paned, padding=(0, 0, scaled(8), 0)) # 创建树视图的子框架，放在分割窗口的左侧（右侧留出与分割条之间的间距）
@@ -285,6 +285,8 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     # 设置窗口初始尺寸与最小尺寸（不超过屏幕可用范围）
     root.geometry(f"{min(scaled(1000), root.winfo_screenwidth() - scaled(80))}x{min(scaled(700), root.winfo_screenheight() - scaled(120))}")
     root.minsize(scaled(680), scaled(540))
+
+    description_card.bind("<Configure>", on_description_resize)
 
     center_window(root) # 让窗口居中
     root.mainloop() # 开始主循环

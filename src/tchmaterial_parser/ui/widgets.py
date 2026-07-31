@@ -3,6 +3,7 @@
 
 import tkinter as tk
 from tkinter import ttk
+from typing import Literal
 
 from . import runtime
 from .theme import register_themed_widget
@@ -11,15 +12,18 @@ from ..platform_utils import os_name
 def make_card(parent: tk.Widget, **kwargs: dict) -> ttk.Frame: # 创建卡片式容器，用于给 tk 原生控件加上圆角边框
     return ttk.Frame(parent, style="Card.TFrame", **kwargs)
 
-def bind_context_menu(parent: tk.Widget) -> None: # 创建右键菜单
-    context_menu = tk.Menu(parent, tearoff=0)
+def bind_context_menu(parent: tk.Widget, type: Literal["normal", "noundo", "readonly"] = "normal") -> None: # 创建右键菜单
+    context_menu = tk.Menu(parent, tearoff=0, font="AppBodyFont")
     register_themed_widget(context_menu)
-    context_menu.add_command(label="撤销 (U)", underline=4, accelerator="Ctrl+Z", command=lambda: parent.event_generate("<<Undo>>"))
-    context_menu.add_separator()
-    context_menu.add_command(label="剪切 (T)", underline=4, accelerator="Ctrl+X", command=lambda: parent.event_generate("<<Cut>>"))
+    if type == "normal":
+        context_menu.add_command(label="撤销 (U)", underline=4, accelerator="Ctrl+Z", command=lambda: parent.event_generate("<<Undo>>"))
+        context_menu.add_separator()
+    if type != "readonly":
+        context_menu.add_command(label="剪切 (T)", underline=4, accelerator="Ctrl+X", command=lambda: parent.event_generate("<<Cut>>"))
     context_menu.add_command(label="复制 (C)", underline=4, accelerator="Ctrl+C", command=lambda: parent.event_generate("<<Copy>>"))
-    context_menu.add_command(label="粘贴 (P)", underline=4, accelerator="Ctrl+V", command=lambda: parent.event_generate("<<Paste>>"))
-    context_menu.add_separator()
+    if type != "readonly":
+        context_menu.add_command(label="粘贴 (P)", underline=4, accelerator="Ctrl+V", command=lambda: parent.event_generate("<<Paste>>"))
+        context_menu.add_separator()
     context_menu.add_command(label="全选 (A)", underline=4, accelerator="Ctrl+A", command=lambda: parent.event_generate("<<SelectAll>>"))
 
     def show_context_menu(event: tk.Event) -> None:

@@ -3,6 +3,7 @@
 
 import os, math, subprocess
 from pathlib import Path
+from typing import Literal
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from .platform_utils import os_name, print_error
@@ -64,7 +65,7 @@ def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # �
                     continue
 
                 padding = max(round(font_size * 0.08), 2)
-                rendered = Image.new("RGBA", (width + padding * 2, height + padding * 2), (0, 0, 0, 0))
+                rendered = Image.new("RGBA", (round(width + padding * 2), round(height + padding * 2)), (0, 0, 0, 0))
                 draw = ImageDraw.Draw(rendered)
                 draw.text(
                     (padding - bounds[0], padding - bounds[1]),
@@ -92,7 +93,7 @@ def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # �
                 continue
     return None
 
-def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: # 绘制不依赖系统字体的主题图标
+def draw_theme_icon_fallback(target_theme: Literal["system", "light", "dark"], icon_size: int) -> Image.Image: # 绘制不依赖系统字体的主题图标
     # 在 4 倍分辨率下绘制，坐标系按 16×16 设计
     scale = icon_size / 4
     canvas_size = icon_size * 4
@@ -148,7 +149,7 @@ def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: 
         icon.alpha_composite(Image.composite(moon_layer, Image.new("RGBA", icon.size, (0, 0, 0, 0)), moon_mask))
 
     else:
-        # 使用类似 🌗 的双色圆形表示“跟随系统”：左侧暖黄色代表浅色主题，右侧蓝色代表深色主题
+        # 使用类似 🌗 的双色圆形表示 “跟随系统”：左侧暖黄色代表浅色主题，右侧蓝色代表深色主题
         bounds = (2.0 * scale, 2.0 * scale, 14.0 * scale, 14.0 * scale)
         circle_mask = Image.new("L", icon.size, 0)
         circle_draw = ImageDraw.Draw(circle_mask)
@@ -159,7 +160,7 @@ def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: 
         system_draw.rectangle((8.0 * scale, 2.0 * scale, 14.0 * scale, 14.0 * scale), fill=system_dark)
         icon.alpha_composite(Image.composite(system_layer, Image.new("RGBA", icon.size, (0, 0, 0, 0)), circle_mask))
 
-        # 中线稍微柔和地分隔明暗两侧，在较大尺寸下也更清晰。
+        # 中线稍微柔和地分隔明暗两侧，在较大尺寸下也更清晰
         draw.line(
             (8.0 * scale, 2.4 * scale, 8.0 * scale, 13.6 * scale),
             fill=(255, 255, 255, 90),
@@ -168,7 +169,7 @@ def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: 
 
     return icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
 
-def make_theme_icon_image(target_theme: str, icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用几何图标
+def make_theme_icon_image(target_theme: Literal["system", "light", "dark"], icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用几何图标
     symbol = "☀️" if target_theme == "light" else "🌙" if target_theme == "dark" else "🌗"
     emoji_icon = render_system_emoji(symbol, icon_size)
     if emoji_icon is not None:

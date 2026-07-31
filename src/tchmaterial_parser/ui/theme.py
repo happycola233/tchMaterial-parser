@@ -5,6 +5,7 @@ import subprocess
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkfont
+from typing import Literal
 import sv_ttk # Sun Valley（Windows 11 风格）主题
 
 from . import runtime
@@ -16,7 +17,7 @@ current_theme = "light" # 当前主题，若 switched_theme 为 `system` 则 cur
 current_colors: dict[str, str] = {} # 当前主题的配色，在 apply_theme() 中填充
 themed_widgets: set[tk.Widget] = set() # 当前仍存在且需要跟随主题调整配色的 tk 原生控件
 
-# 主题配色。surface 为 sv-ttk 卡片贴图的填充色，须与之一致，否则卡片内会出现色差；
+# 主题配色，surface 为 sv-ttk 卡片贴图的填充色，须与之一致，否则卡片内会出现色差；
 # page 比 surface 略深，用作页面底色，让卡片、列表、文本框显出层次
 THEME_COLORS = {
     "light": { "page": "#f2f2f2", "surface": "#fafafa", "fg": "#1c1c1c", "muted": "#5d5d5d", "selbg": "#2f60d8", "selfg": "#ffffff" },
@@ -61,7 +62,7 @@ def setup_fonts() -> None: # 创建（或更新）所有命名字体，使其使
         options = ("-family", ui_font_family, "-size", -scaled(size), "-weight", "bold" if bold else "normal")
         runtime.root.tk.call("font", "configure" if name in existing_fonts else "create", name, *options)
 
-def detect_system_theme() -> str: # 获取系统当前使用的是浅色还是深色模式
+def detect_system_theme() -> Literal["light", "dark"]: # 获取系统当前使用的是浅色还是深色模式
     try:
         if os_name == "Windows" and winreg: # 在 Windows 上，读取注册表中的个性化设置
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize") as key:
@@ -94,13 +95,6 @@ def apply_titlebar_theme(window: tk.Tk | tk.Toplevel) -> None: # 在 Windows 上
         for attribute in (20, 19): # DWMWA_USE_IMMERSIVE_DARK_MODE，20 适用于 Windows 10 20H1 及更新版本，19 适用于更早的版本
             if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)) == 0:
                 break
-
-        if window.winfo_viewable(): # 让窗口宽度增减 1 像素，以强制标题栏重绘，否则切换主题后标题栏不会立即更新
-            width, height = window.winfo_width(), window.winfo_height()
-            window.geometry(f"{width + 1}x{height}")
-            window.update_idletasks()
-            window.geometry(f"{width}x{height}")
-
     except Exception as e:
         print_error(e)
 
@@ -112,10 +106,10 @@ def register_themed_widget(widget: tk.Widget) -> None: # 登记需要跟随主�
 def apply_widget_theme(widget: tk.Widget) -> None: # 为单个 tk 原生控件应用当前主题配色
     if isinstance(widget, tk.Menu):
         widget.configure(background=current_colors["surface"], foreground=current_colors["fg"], activebackground=current_colors["selbg"], activeforeground=current_colors["selfg"], activeborderwidth=0, borderwidth=0, relief="flat")
-    else: # tk.Text
+    elif isinstance(widget, tk.Text):
         widget.configure(background=current_colors["surface"], foreground=current_colors["fg"], insertbackground=current_colors["fg"], selectbackground=current_colors["selbg"], selectforeground=current_colors["selfg"], borderwidth=0, relief="flat", highlightthickness=0)
 
-def apply_theme(theme: str) -> None: # 应用浅色/深色主题
+def apply_theme(theme: Literal["system", "light", "dark"]) -> None: # 应用浅色/深色主题
     global switched_theme, current_theme, current_colors
     switched_theme = theme if theme in ("system", "light", "dark") else "system"
     current_theme = theme if theme in THEME_COLORS else detect_system_theme()
@@ -123,7 +117,7 @@ def apply_theme(theme: str) -> None: # 应用浅色/深色主题
 
     sv_ttk.set_theme(current_theme, runtime.root)
     # sv-ttk 把配色函数绑定在 <<ThemeChanged>> 事件上，但一来该事件不会送达尚无 ttk 子控件的根窗口（首次启动时配色不生效），
-    # 二来后面每次调用 ttk::style configure 都会重新触发该事件，从而把下面的自定义配色覆盖回去。因此解绑它，改为在此显式调用一次。
+    # 二来后面每次调用 ttk::style configure 都会重新触发该事件，从而把下面的自定义配色覆盖回去，因此解绑它，改为在此显式调用一次
     runtime.root.unbind_class("Tk", "<<ThemeChanged>>")
     runtime.root.tk.call("configure_colors")
 

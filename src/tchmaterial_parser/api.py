@@ -71,7 +71,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         data: dict = response.json()
 
         # 3. 获取资源标题、下载链接及章节目录
-        def get_resource_info(resource_data) -> tuple[str, str, str, list[dict]] | None:
+        def get_resource_info(resource_data: dict) -> tuple[str, str, str, list[dict]] | None:
             title: str = resource_data.get("title")
             resource_url: str | None = None
             format: str | None = None

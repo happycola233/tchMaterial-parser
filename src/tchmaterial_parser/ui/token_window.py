@@ -4,12 +4,11 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import download_panel, runtime
+from . import runtime
 from .runtime import scaled
 from .theme import ACCENT_BUTTON_STYLE, apply_titlebar_theme, register_themed_widget
 from .widgets import bind_context_menu, bind_tab_navigation, center_window, make_card
 from .. import config
-from ..platform_utils import os_name
 
 def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_window = tk.Toplevel(runtime.root)
@@ -53,15 +52,14 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_text.bind("<Shift-Return>", lambda e: "break") # 按下 Shift＋Enter 也不换行，直接屏蔽
 
     # 保存按钮
-    def save_token():
+    def save_token() -> None:
         user_token = token_text.get("1.0", "end").strip()
         tip_info = config.set_access_token(user_token)
-        download_panel.enable_download_button() # 重新启用下载按钮
-        messagebox.showinfo("保存成功", tip_info)
+        messagebox.showinfo("保存成功", tip_info, parent=token_window)
         token_window.destroy()
 
     # 帮助按钮
-    def show_token_help():
+    def show_token_help() -> None:
         help_win = tk.Toplevel(token_window)
         help_win.title("获取 Access Token 方法")
         help_win.resizable(False, False) # 禁止调整窗口大小
@@ -101,23 +99,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         txt.config(state="disabled")
         txt.pack(fill="both", expand=True)
         register_themed_widget(txt)
-
-        # 同样可给帮助文本区绑定右键菜单
-        help_menu = tk.Menu(txt, tearoff=0)
-        register_themed_widget(help_menu)
-        help_menu.add_command(label="复制 (C)", underline=4, accelerator="Ctrl+C", command=lambda: txt.event_generate("<<Copy>>"))
-        help_menu.add_command(label="全选 (A)", underline=4, accelerator="Ctrl+A", command=lambda: txt.event_generate("<<SelectAll>>"))
-
-        def show_help_menu(event: tk.Event) -> None:
-            help_menu.post(event.x_root, event.y_root)
-            help_menu.bind("<FocusOut>", lambda e: help_menu.unpost())
-            runtime.root.bind("<Button-1>", lambda e: help_menu.unpost(), add="+")
-
-        txt.bind("<Button-3>", show_help_menu)
-        txt.bind("<Menu>", show_help_menu) # BUG: 按下菜单键不起作用
-        if os_name == "Darwin":
-            txt.bind("<Control-Button-1>", show_help_menu)
-            txt.bind("<Button-2>", show_help_menu)
+        bind_context_menu(txt, "readonly")
 
         center_window(help_win, token_window) # 让帮助弹窗居中
         apply_titlebar_theme(help_win) # 让标题栏跟随主题

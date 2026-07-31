@@ -9,13 +9,13 @@ from PIL import Image, ImageOps, ImageTk
 
 from . import runtime, theme
 from .runtime import scaled, thread_it, ui_call
-from .widgets import auto_hide_scrollbar
+from .widgets import auto_hide_scrollbar, bind_context_menu
 from ..catalog import count_resource_items, filter_resource_items
 from ..images import fit_cover_image
 from ..network import session
 from ..platform_utils import os_name, print_error
 
-def build_resource_tree(pane: ttk.Frame, resource_list: dict, url_text: tk.Text) -> None: # 在给定的子框架内构建资源列表
+def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_text: tk.Text) -> None: # 在给定的子框架内构建资源列表
     pane.columnconfigure(0, weight=1)
     pane.rowconfigure(2, weight=1)
 
@@ -35,6 +35,8 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict, url_text: tk.Text)
     search_var = tk.StringVar()
     search_entry = ttk.Entry(search_frame, textvariable=search_var, font="AppBodyFont")
     search_entry.grid(row=0, column=1, sticky="ew")
+    bind_context_menu(search_entry, "noundo")
+
     clear_search_btn = ttk.Button(search_frame, text="清除", width=5, command=lambda: search_var.set(""))
     clear_search_btn.grid(row=0, column=2, padx=(scaled(6), 0))
 

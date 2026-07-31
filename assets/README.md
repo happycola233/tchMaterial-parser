@@ -1,7 +1,6 @@
 # 图标资源说明
 
-本目录存放图标的**源文件**与**打包时使用的图标**。`logo.icns` 与 `icon.ico` 只在构建阶段使用；
-`window_icon.png` 由程序在运行时读取，并通过 PyInstaller 的 `datas` 一并打包。
+本目录存放图标的**源文件**与**打包时使用的图标**。其中 `logo.icns` 与 `icon.ico` 只在构建阶段使用；`window_icon.png` 由程序在运行时读取，并通过 PyInstaller 的 `datas` 一并打包。
 
 | 文件 | 用途 | 由谁使用 |
 | --- | --- | --- |
@@ -17,8 +16,7 @@
 
 ### 1. 重新生成 `icon.ico`
 
-`icon.ico` 需要包含**多个尺寸**：Windows 在标题栏用 16×16，在桌面用 32×32，在「超大图标」
-视图下用 256×256。若只放单一尺寸，系统只能拉伸缩放，会明显模糊。
+`icon.ico` 需要包含**多个尺寸**：Windows 在标题栏用 16×16，在桌面用 32×32，在「超大图标」视图下用 256×256。若只放单一尺寸，系统只能拉伸缩放，会明显模糊。
 
 ```python
 from PIL import Image
@@ -32,8 +30,7 @@ Image.open("assets/logo.png").convert("RGBA").save(
 
 ### 2. 重新生成 `logo.icns`
 
-在 macOS 上可使用系统自带的 `iconutil`（需先按 `icon_16x16.png`、`icon_16x16@2x.png` 等
-命名规则准备一个 `logo.iconset` 目录）：
+在 macOS 上可使用系统自带的 `iconutil`（需先按 `icon_16x16.png`、`icon_16x16@2x.png` 等命名规则准备一个 `logo.iconset` 目录）：
 
 ```sh
 iconutil -c icns logo.iconset -o assets/logo.icns
@@ -41,5 +38,4 @@ iconutil -c icns logo.iconset -o assets/logo.icns
 
 ### 3. 更新 `window_icon.png`
 
-程序以 `assets/window_icon.png` 作为运行时窗口图标的唯一来源。更新图标时直接替换该文件即可，
-无需再同步源码字符串；`tchMaterial-parser.spec` 会在打包时将它收集到相同的 `assets/` 相对路径。
+程序以 `assets/window_icon.png` 作为运行时窗口图标的唯一来源。更新图标时直接替换该文件即可，无需再同步源码字符串；`tchMaterial-parser.spec` 会在打包时将它收集到相同的 `assets/` 相对路径。

@@ -20,9 +20,6 @@ def bind_widgets(text: tk.Text, bookmark: tk.BooleanVar, button: ttk.Button, pro
     global url_text, bookmark_var, download_btn, download_progress_bar, progress_label
     url_text, bookmark_var, download_btn, download_progress_bar, progress_label = text, bookmark, button, progress_bar, label
 
-def enable_download_button() -> None: # 供 Token 窗口在保存凭据后重新启用下载按钮
-    download_btn.config(state="normal")
-
 def parse_and_copy() -> None: # 解析并复制链接
     urls = {line.strip() for line in url_text.get("1.0", "end").splitlines() if line.strip()} # 获取所有非空行并去重
     resource_urls: set[str] = set()

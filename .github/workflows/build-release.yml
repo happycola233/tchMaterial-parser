@@ -42,7 +42,7 @@ jobs:
             binary: tchMaterial-parser.app
             asset: tchMaterial-parser-mac-x64.zip
           - name: macOS Arm64
-            os: macos-26
+            os: macos-latest
             binary: tchMaterial-parser.app
             asset: tchMaterial-parser-mac-arm64.zip
 
