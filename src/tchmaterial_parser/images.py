@@ -11,7 +11,7 @@ def color_emoji_font_paths() -> list[Path]: # 获取当前系统可能存在的�
     candidates: list[Path] = []
 
     if os_name == "Windows":
-        windows_dir = Path(os.environ.get("WINDIR") or os.environ.get("SystemRoot") or "C:/Windows")
+        windows_dir = Path(os.getenv("WINDIR") or os.getenv("SystemRoot") or "C:/Windows")
         candidates.append(windows_dir / "Fonts" / "seguiemj.ttf") # Segoe UI Emoji
     elif os_name == "Darwin":
         candidates.extend([
@@ -92,64 +92,79 @@ def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # �
                 continue
     return None
 
-def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: # 绘制无须系统字体的月亮或太阳图标
-    # 先以 4 倍尺寸绘制再缩小，使曲线和斜线在高 DPI 与普通屏幕上都保持平滑
-    draw_scale = icon_size / 4
-    icon = Image.new("RGBA", (icon_size * 4, icon_size * 4), (0, 0, 0, 0))
+def draw_theme_icon_fallback(target_theme: str, icon_size: int) -> Image.Image: # 绘制不依赖系统字体的主题图标
+    # 在 4 倍分辨率下绘制，坐标系按 16×16 设计
+    scale = icon_size / 4
+    canvas_size = icon_size * 4
+
+    icon = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(icon)
 
-    if target_theme == "light": # 暖黄色太阳表示浅色模式
-        center = 8 * draw_scale
-        ray_inner = 5.3 * draw_scale
-        ray_outer = 7.2 * draw_scale
-        ray_width = max(round(1.25 * draw_scale), 1)
+    yellow = "#F0B429"
+    blue = "#5B8DEF"
+    system_dark = "#4D6FA9"
+
+    def rounded_line(start: tuple[float, float], end: tuple[float, float], fill: str, width: float) -> None: # 绘制带圆形端点的线段，使太阳光芒在小尺寸下更平滑
+        line_width = max(round(width * scale), 1)
+        radius = line_width / 2
+        start_px = (start[0] * scale, start[1] * scale)
+        end_px = (end[0] * scale, end[1] * scale)
+        draw.line((start_px, end_px), fill=fill, width=line_width)
+
+        for point_x, point_y in (start_px, end_px):
+            draw.ellipse((point_x - radius, point_y - radius, point_x + radius, point_y + radius), fill=fill)
+
+    if target_theme == "light":
+        # 太阳主体略小一些，为光芒留出均匀空间
+        center = (8.0, 8.0)
+        body_radius = 3.0
+        ray_inner = 5.2
+        ray_outer = 7.1
+
         for angle in range(0, 360, 45):
             radians = math.radians(angle)
-            start = (center + math.cos(radians) * ray_inner, center + math.sin(radians) * ray_inner)
-            end = (center + math.cos(radians) * ray_outer, center + math.sin(radians) * ray_outer)
-            draw.line((start, end), fill="#f0b429", width=ray_width)
-        radius = 3.2 * draw_scale
-        draw.ellipse((center - radius, center - radius, center + radius, center + radius), fill="#f0b429")
-    elif target_theme == "dark": # 蓝色月牙表示深色模式
-        draw.ellipse(
-            (round(2.2 * draw_scale), round(1.4 * draw_scale), round(13.6 * draw_scale), round(14.6 * draw_scale)),
-            fill="#5b8def",
-        )
-        # 用透明遮罩挖掉月牙内部
-        mask = Image.new("L", icon.size, 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.ellipse(
-            (round(5.4 * draw_scale), round(0.4 * draw_scale), round(15.2 * draw_scale), round(11.8 * draw_scale)),
-            fill=255,
-        )
-        icon.paste((0, 0, 0, 0), mask=mask)
-    else: # 半太阳半月亮表示跟随系统
-        # 左侧太阳
-        center = 8 * draw_scale
-        ray_inner = 5.2 * draw_scale
-        ray_outer = 7.2 * draw_scale
-        ray_width = max(round(1.25 * draw_scale), 1)
-        # 太阳光线只绘制左侧和上方，避免过于拥挤
-        for angle in range(135, 316, 45):
-            radians = math.radians(angle)
-            start = (center + math.cos(radians) * ray_inner, center + math.sin(radians) * ray_inner)
-            end = (center + math.cos(radians) * ray_outer, center + math.sin(radians) * ray_outer)
-            draw.line((start, end), fill="#f0b429", width=ray_width)
-        radius = 3.2 * draw_scale
-        draw.ellipse((center - radius, center - radius, center + radius, center + radius), fill="#f0b429")
+            cos_angle = math.cos(radians)
+            sin_angle = math.sin(radians)
 
-        # 右侧月牙
+            rounded_line(
+                (center[0] + cos_angle * ray_inner, center[1] + sin_angle * ray_inner),
+                (center[0] + cos_angle * ray_outer, center[1] + sin_angle * ray_outer),
+                fill=yellow,
+                width=1.05,
+            )
+
         draw.ellipse(
-            (round(7.0 * draw_scale), round(1.5 * draw_scale), round(15.0 * draw_scale), round(14.5 * draw_scale)),
-            fill="#5b8def",
+            ((center[0] - body_radius) * scale, (center[1] - body_radius) * scale, (center[0] + body_radius) * scale, (center[1] + body_radius) * scale),
+            fill=yellow,
         )
-        mask = Image.new("L", icon.size, 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.ellipse(
-            (round(9.5 * draw_scale), round(0.8 * draw_scale), round(16.0 * draw_scale), round(11.5 * draw_scale)),
-            fill=255,
+
+    elif target_theme == "dark":
+        # 先绘制圆月，再用独立 alpha 遮罩挖出月牙
+        moon_mask = Image.new("L", icon.size, 0)
+        moon_draw = ImageDraw.Draw(moon_mask)
+        moon_draw.ellipse((2.2 * scale, 1.3 * scale, 13.7 * scale, 14.7 * scale), fill=255)
+        moon_draw.ellipse((5.4 * scale, 0.3 * scale, 15.3 * scale, 11.9 * scale), fill=0)
+        moon_layer = Image.new("RGBA", icon.size, blue)
+        icon.alpha_composite(Image.composite(moon_layer, Image.new("RGBA", icon.size, (0, 0, 0, 0)), moon_mask))
+
+    else:
+        # 使用类似 🌗 的双色圆形表示“跟随系统”：左侧暖黄色代表浅色主题，右侧蓝色代表深色主题
+        bounds = (2.0 * scale, 2.0 * scale, 14.0 * scale, 14.0 * scale)
+        circle_mask = Image.new("L", icon.size, 0)
+        circle_draw = ImageDraw.Draw(circle_mask)
+        circle_draw.ellipse(bounds, fill=255)
+        system_layer = Image.new("RGBA", icon.size, (0, 0, 0, 0))
+        system_draw = ImageDraw.Draw(system_layer)
+        system_draw.rectangle((2.0 * scale, 2.0 * scale, 8.0 * scale, 14.0 * scale), fill=yellow)
+        system_draw.rectangle((8.0 * scale, 2.0 * scale, 14.0 * scale, 14.0 * scale), fill=system_dark)
+        icon.alpha_composite(Image.composite(system_layer, Image.new("RGBA", icon.size, (0, 0, 0, 0)), circle_mask))
+
+        # 中线稍微柔和地分隔明暗两侧，在较大尺寸下也更清晰。
+        draw.line(
+            (8.0 * scale, 2.4 * scale, 8.0 * scale, 13.6 * scale),
+            fill=(255, 255, 255, 90),
+            width=max(round(0.35 * scale), 1),
         )
-        icon.paste((0, 0, 0, 0), mask=mask)
 
     return icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
 

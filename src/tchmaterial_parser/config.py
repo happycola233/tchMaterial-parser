@@ -2,6 +2,7 @@
 # 本地配置的读写（Windows 用注册表，其余平台用 JSON 文件）与 Access Token 的维护
 
 import json, os
+from pathlib import Path
 
 from .network import headers
 from .platform_utils import os_name, print_error, winreg
@@ -11,17 +12,17 @@ access_token: str | None = None
 REGISTRY_PATH = "Software\\tchMaterial-parser" # Windows 下存放配置的注册表键
 CONFIG_KEYS = { "access_token": "AccessToken", "theme": "Theme" } # 配置项名称到注册表值名称的映射（JSON 文件直接使用配置项名称）
 
-def config_file_path() -> str | None: # 获取配置文件路径
+def config_file_path() -> Path | None: # 获取配置文件路径
     if os_name == "Windows": # 在 Windows 上，配置存放于 %LOCALAPPDATA%\tchMaterial-parser\data.json（此处为备用）
-        return os.path.join(
-            os.getenv("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local"), # os.path.expanduser("~") 为当前用户主目录
+        return Path(
+            os.getenv("LOCALAPPDATA") or Path.home() / "AppData" / "Local",
             "tchMaterial-parser",
             "data.json",
         )
     elif os_name in ("Linux", "Android"): # 在 Linux 上，配置存放于 ~/.config/tchMaterial-parser/data.json
-        return os.path.join(os.path.expanduser("~"), ".config", "tchMaterial-parser", "data.json")
+        return Path.home() / ".config" / "tchMaterial-parser" / "data.json"
     elif os_name == "Darwin": # 在 macOS 上，配置存放于 ~/Library/Application Support/tchMaterial-parser/data.json
-        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "tchMaterial-parser", "data.json")
+        return Path.home() / "Library" / "Application Support" / "tchMaterial-parser" / "data.json"
 
 def config_location() -> str: # 获取配置存放位置的描述文本，用于提示用户
     if os_name == "Windows":
