@@ -7,7 +7,7 @@ from tkinter import ttk, messagebox
 import psutil
 from PIL import Image, ImageTk
 
-from . import VERSION
+from . import __version__
 from .catalog import resource_helper
 from .config import load_access_token, load_config, save_config
 from .images import make_theme_icon_image, render_system_emoji
@@ -75,7 +75,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
 
     # 界面元素的尺寸另算：macOS 会自行处理 Retina 缩放，故固定取 1。
     runtime.ui_scale = 1.0 if os_name == "Darwin" else max(scale, 1.0)
-    root.title(f"国家中小学智慧教育平台 资源下载工具 {VERSION}") # 设置窗口标题
+    root.title(f"国家中小学智慧教育平台 资源下载工具 {__version__}") # 设置窗口标题
 
     # 应用主题：优先沿用用户上次手动切换的结果，否则跟随系统的浅色/深色模式
     saved_theme = saved_config.get("theme")
@@ -146,7 +146,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     title_frame.pack(side="left")
     title_label = ttk.Label(title_frame, text="国家中小学智慧教育平台 资源下载工具", style="Title.TLabel") # 添加标题标签
     title_label.pack(anchor="w")
-    subtitle_label = ttk.Label(title_frame, text=f"{VERSION} · 批量下载 · PDF 书签 · 免费开源", style="Caption.TLabel") # 添加副标题标签
+    subtitle_label = ttk.Label(title_frame, text=f"{__version__} · 批量下载 · PDF 书签 · 免费开源", style="Caption.TLabel") # 添加副标题标签
     subtitle_label.pack(anchor="w")
 
     theme_icons: dict[str, ImageTk.PhotoImage] = {} # 缓存两个主题图标，并同时防止 Tk 图片被垃圾回收

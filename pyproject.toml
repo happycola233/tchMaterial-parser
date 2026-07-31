@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tchMaterial-parser"
+version = "4.0"
+description = "国家中小学智慧教育平台 资源下载工具"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "肥宅水水呀"}, {name = "晨叶梦春", email = "wuziqian211@126.com"}]
+dependencies = [
+    "Pillow>=10,<12",
+    "psutil>=5.9,<8",
+    "pypdf>=5,<6",
+    "pyperclip>=1.8,<2",
+    "requests>=2.31,<3",
+    "sv-ttk>=2.6,<3",
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.urls]
+Homepage = "https://github.com/happycola233/tchMaterial-parser"
+Repository = "https://github.com/happycola233/tchMaterial-parser"
+
+[project.scripts]
+"tchmaterial-parser" = "tchmaterial_parser.app:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 120
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-q"
+testpaths = ["tests"]

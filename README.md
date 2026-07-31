@@ -103,7 +103,7 @@ yay -S tchmaterial-parser
 ```sh
 git clone https://github.com/happycola233/tchMaterial-parser.git
 cd tchMaterial-parser
-pip install -r ./requirements.txt
+pip install .
 python ./src/main.py
 ```
 

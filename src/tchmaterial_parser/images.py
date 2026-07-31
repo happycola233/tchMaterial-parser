@@ -5,7 +5,7 @@ import os, math, subprocess
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from .platform_utils import os_name
+from .platform_utils import os_name, print_error
 
 def color_emoji_font_paths() -> list[Path]: # 获取当前系统可能存在的彩色 Emoji 字体
     candidates: list[Path] = []
@@ -30,7 +30,7 @@ def color_emoji_font_paths() -> list[Path]: # 获取当前系统可能存在的�
             )
             if result.returncode == 0 and result.stdout.strip():
                 candidates.append(Path(result.stdout.splitlines()[0].strip()))
-        except (FileNotFoundError, subprocess.SubprocessError):
+        except Exception:
             pass
         candidates.extend([
             Path("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"),
@@ -87,7 +87,8 @@ def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # �
                 icon = Image.new("RGBA", (icon_size, icon_size), (0, 0, 0, 0))
                 icon.alpha_composite(resized, ((icon_size - resized.width) // 2, (icon_size - resized.height) // 2))
                 return icon
-            except (OSError, ValueError):
+            except Exception as e:
+                print_error(e)
                 continue
     return None
 
