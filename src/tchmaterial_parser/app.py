@@ -263,7 +263,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     token_btn = ttk.Button(button_frame, text="设置 Token", command=show_access_token_window)
     token_btn.pack(side="left")
 
-    # 开关：添加书签
+    # 开关：添加 PDF 书签
     bookmark_var = tk.BooleanVar(value=True)
     bookmark_checkbox = ttk.Checkbutton(button_frame, text="添加 PDF 书签", variable=bookmark_var, style=theme.SWITCH_STYLE)
     bookmark_checkbox.pack(side="left", padx=(scaled(16), 0))

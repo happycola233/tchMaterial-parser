@@ -39,9 +39,11 @@ jobs:
             asset: tchMaterial-parser-linux-arm64
           - name: macOS x64
             os: macos-26-intel
+            binary: tchMaterial-parser.app
             asset: tchMaterial-parser-mac-x64.zip
           - name: macOS Arm64
             os: macos-26
+            binary: tchMaterial-parser.app
             asset: tchMaterial-parser-mac-arm64.zip
 
     steps:
@@ -57,7 +59,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install -r requirements.txt
+          pip install .
 
       - name: Build app with PyInstaller
         run: pyinstaller ./tchMaterial-parser.spec
@@ -71,7 +73,7 @@ jobs:
       # macOS 构建出的是 .app 应用包（一个目录），需用 ditto 打包为 zip 以保留资源分支与权限
       - name: Pack app (macOS)
         if: runner.os == 'macOS'
-        run: /usr/bin/ditto -c -k --keepParent -rsrc dist/tchMaterial-parser.app "dist/${{ matrix.asset }}"
+        run: /usr/bin/ditto -c -k --keepParent -rsrc "dist/${{ matrix.binary }}" "dist/${{ matrix.asset }}"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
