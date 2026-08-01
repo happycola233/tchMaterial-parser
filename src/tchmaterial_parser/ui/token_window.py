@@ -66,6 +66,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         help_win.focus() # 自动获得焦点
         help_win.grab_set() # 阻止主窗口操作
         help_win.bind("<Escape>", lambda event: help_win.destroy()) # 绑定 Esc 键关闭窗口
+        help_win.bind("<Destroy>", lambda event: token_window.grab_set())
 
         help_frame = ttk.Frame(help_win, padding=scaled(20))
         help_frame.pack(fill="both", expand=True)

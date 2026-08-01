@@ -133,7 +133,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                                 result: list[dict] = []
                                 for node in nodes:
                                     # 从 page_map 中找页码，找不到为 None
-                                    page_num: int = next((m["page_number"] for m in page_map if m["node_id"] == node["id"]), None)
+                                    page_num: int | None = next((m["page_number"] for m in page_map if m["node_id"] == node["id"]), None)
                                     chapter_item = {
                                         "title": node["title"],
                                         "page_index": page_num
