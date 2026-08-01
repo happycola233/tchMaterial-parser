@@ -167,7 +167,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
             resource_type = resource_data.get("resource_type_code") or "assets_document"
             content_id = resource_data.get("content_id") or item.split(":")[-1]
             if resource_type == "teachingmaterials":
-                url = f"https://basic.smartedu.cn/syncClassroom?defaultTag={"%2F".join(item.split(':')[1:])}"
+                url = f"https://basic.smartedu.cn/syncClassroom?defaultTag={'%2F'.join(item.split(':')[1:])}"
             else:
                 url = f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={content_id}&catalogType=tchMaterial&subCatalog=tchMaterial"
 

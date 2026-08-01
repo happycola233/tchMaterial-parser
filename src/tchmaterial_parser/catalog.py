@@ -3,7 +3,7 @@
 
 from .network import session
 
-class resource_helper: # 获取网站上资源的数据
+class ResourceHelper: # 获取网站上资源的数据
     def parse_hierarchy(self, hierarchy: list) -> dict: # 解析层级数据
         if not hierarchy: # 如果没有层级数据，返回空字典
             return {}

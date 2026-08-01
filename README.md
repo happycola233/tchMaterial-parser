@@ -176,9 +176,9 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 ### 3. 🚀 开始下载
 
-点击 “**下载**” 按钮，工具将自动解析并下载 PDF 课本。
+点击 “**下载**” 按钮，工具将自动解析并下载电子课本文件。
 
-本工具支持**批量下载**，所有 PDF 文件会自动按课本名称命名并保存在选定目录中。
+本工具支持**批量下载**，所有文件会自动按课本名称命名并保存在选定目录中。
 
 若您开启了 “**设置 PDF 书签**”，则本工具会在课本下载完成后自动为其添加书签，在查看 PDF 时可快速跳转到指定位置。
 
@@ -264,6 +264,5 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 - 📚 您也可以在 [ChinaTextbook](https://github.com/TapXWorld/ChinaTextbook) 项目中下载归档的电子课本 PDF。
 
 <div align="center">
-<br />
 <sub>如果这个工具对您有帮助，欢迎点一个 ⭐ Star 支持一下！</sub>
 </div>

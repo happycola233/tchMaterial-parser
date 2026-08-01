@@ -72,12 +72,12 @@ def download() -> None: # 下载资源文件
         dir_path = None
 
     for resource in resources_info_list:
-        title, resource_url, format, chapters = resource
+        title, resource_url, resource_format, chapters = resource
         default_filename = title or "download"
         if dir_path:
-            save_path = os.path.join(dir_path, f"{default_filename}.{format}") # 构造完整路径
+            save_path = os.path.join(dir_path, f"{default_filename}.{resource_format}") # 构造完整路径
         else:
-            save_path = filedialog.asksaveasfilename(defaultextension=f".{format}", filetypes=[(f"{format.upper()} 文件", f"*.{format}"), ("所有文件", "*.*")], initialfile=default_filename) # 选择保存路径
+            save_path = filedialog.asksaveasfilename(defaultextension=f".{resource_format}", filetypes=[(f"{resource_format.upper()} 文件", f"*.{resource_format}"), ("所有文件", "*.*")], initialfile=default_filename) # 选择保存路径
             if not save_path: # 用户取消了文件保存操作
                 download_btn.config(state="normal") # 恢复下载按钮为启用状态
                 return

@@ -8,7 +8,7 @@ import psutil
 from PIL import Image, ImageTk
 
 from . import __version__
-from .catalog import resource_helper
+from .catalog import ResourceHelper
 from .config import load_access_token, load_config, save_config
 from .images import make_theme_icon_image, render_system_emoji
 from .platform_utils import ctypes, os_name, print_error, resource_path, win32api, win32con, win32gui, win32print
@@ -46,7 +46,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
 
     # 获取资源列表
     try:
-        resource_list = resource_helper().fetch_resource_list()
+        resource_list = ResourceHelper().fetch_resource_list()
     except Exception as e:
         print_error(e)
         resource_list = {}

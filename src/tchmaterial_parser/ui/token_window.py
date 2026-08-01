@@ -32,7 +32,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     # 创建多行 Text（外面套一层卡片，以获得与其他控件一致的圆角边框）
     token_card = make_card(frame)
     token_card.pack(fill="both", expand=True)
-    token_text = tk.Text(token_card, width=50, height=4, wrap="char", undo=True, font="AppBodyFont")
+    token_text = tk.Text(token_card, width=50, height=4, wrap="char", undo=True, font="AppBodyFont", padx=scaled(6), pady=scaled(4))
     token_text.pack(fill="both", expand=True)
     register_themed_widget(token_text)
     bind_context_menu(token_text)

@@ -15,7 +15,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         content_id: str | None = None
         content_type: str | None = None
 
-        params = parse_qs(urlparse(url, 'https').query)
+        params = parse_qs(urlparse(url, "https").query)
 
         if "contentId" in params:
             content_id = params["contentId"][0]
@@ -74,28 +74,31 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         def get_resource_info(resource_data: dict) -> tuple[str, str, str, list[dict]] | None:
             title: str = resource_data.get("title")
             resource_url: str | None = None
-            format: str | None = None
+            resource_format = "pdf"
 
             for item in resource_data["ti_items"]: # 寻找存有资源链接列表的项
-                if item["ti_is_source_file"]: # 获取并构造资源的 URL
-                    resource_url = item.get("ti_storage")
-                    if resource_url:
-                        resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
-                    else:
-                        resource_url = next((url for url in item["ti_storages"] if url), None)
-                        if not resource_url:
-                            continue
-                    format = item.get("ti_format") or "pdf"
-                    if format == "folder":
-                       continue
-                    break
+                if not item["ti_is_source_file"]:
+                    continue
+
+                resource_format = item.get("ti_format") or "pdf"
+                if resource_format == "folder":
+                   continue
+
+                resource_url = item.get("ti_storage") # 获取并构造资源的 URL
+                if resource_url:
+                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
+                else:
+                    resource_url = next((url for url in item["ti_storages"] if url), None)
+                    if not resource_url:
+                        continue
+                break
 
             if not resource_url:
                 return None
 
             # 通过 ebook_mapping + tree 接口组合获取章节目录
             chapters: list[dict] = []
-            if bookmarks and format == "pdf":
+            if bookmarks and resource_format == "pdf":
                 try:
                     mapping_url: str | None = None
                     for item in resource_data["ti_items"]:
@@ -162,7 +165,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                     print_error(e)
                     chapters = []
 
-            return title, resource_url, format, chapters
+            return title, resource_url, resource_format, chapters
 
         resource_info = get_resource_info(data)
         if resource_info:

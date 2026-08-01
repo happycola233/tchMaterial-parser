@@ -71,7 +71,7 @@ def detect_system_theme() -> Literal["light", "dark"]: # 获取系统当前使�
         elif os_name == "Darwin": # 在 macOS 上，读取全局偏好设置（仅深色模式下存在 AppleInterfaceStyle 项，其值为 Dark）
             result = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"], capture_output=True, text=True, timeout=2)
             return "dark" if result.stdout.strip() == "Dark" else "light"
-        elif os_name == "Linux": # 在 Linux 上，读取 GNOME 的配色方案设置（其值形如 'prefer-dark'）
+        elif os_name == "Linux": # 在 Linux 上，读取 GNOME 的配色方案设置（其值形如 "prefer-dark"）
             try:
                 result = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"], capture_output=True, text=True, timeout=2)
             except FileNotFoundError: # 非 GNOME 桌面环境多半没有 gsettings，此时无从判断，按浅色处理
