@@ -6,9 +6,12 @@ from PyInstaller.utils.hooks import collect_data_files
 is_mac = sys.platform.startswith('darwin')
 
 # sv-ttk 通过 Path(__file__).with_name() 加载主题文件，需把随包的 .tcl 与 .png 一并收集进来；
-# window_icon.png 是程序运行时读取的自有资源，目标目录保持为 assets/，与源码中的相对路径一致
+# 下面 4 个图标文件是程序运行时读取的自有资源，目标目录保持为 assets/，与源码中的相对路径一致
 data_files = collect_data_files('sv_ttk') + [
     ('assets/window_icon.png', 'assets'),
+    ('assets/sun_3d.png', 'assets'),
+    ('assets/crescent_moon_3d.png', 'assets'),
+    ('assets/last_quarter_moon_3d.png', 'assets'),
 ]
 
 a = Analysis(

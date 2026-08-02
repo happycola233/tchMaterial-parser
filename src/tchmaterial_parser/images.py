@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # 图像相关的处理：系统彩色 Emoji 字形渲染、主题图标绘制与封面适配
 
-import os, math, subprocess
+import os, subprocess
 from pathlib import Path
 from typing import Literal
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from .platform_utils import os_name, print_error
+from .platform_utils import os_name, print_error, resource_path
 
 def color_emoji_font_paths() -> list[Path]: # 获取当前系统可能存在的彩色 Emoji 字体
     candidates: list[Path] = []
@@ -93,88 +93,17 @@ def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # �
                 continue
     return None
 
-def draw_theme_icon_fallback(target_theme: Literal["system", "light", "dark"], icon_size: int) -> Image.Image: # 绘制不依赖系统字体的主题图标
-    # 在 4 倍分辨率下绘制，坐标系按 16×16 设计
-    scale = icon_size / 4
-    canvas_size = icon_size * 4
-
-    icon = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(icon)
-
-    yellow = "#F0B429"
-    blue = "#5B8DEF"
-    system_dark = "#4D6FA9"
-
-    def rounded_line(start: tuple[float, float], end: tuple[float, float], fill: str, width: float) -> None: # 绘制带圆形端点的线段，使太阳光芒在小尺寸下更平滑
-        line_width = max(round(width * scale), 1)
-        radius = line_width / 2
-        start_px = (start[0] * scale, start[1] * scale)
-        end_px = (end[0] * scale, end[1] * scale)
-        draw.line((start_px, end_px), fill=fill, width=line_width)
-
-        for point_x, point_y in (start_px, end_px):
-            draw.ellipse((point_x - radius, point_y - radius, point_x + radius, point_y + radius), fill=fill)
-
-    if target_theme == "light":
-        # 太阳主体略小一些，为光芒留出均匀空间
-        center = (8.0, 8.0)
-        body_radius = 3.0
-        ray_inner = 5.2
-        ray_outer = 7.1
-
-        for angle in range(0, 360, 45):
-            radians = math.radians(angle)
-            cos_angle = math.cos(radians)
-            sin_angle = math.sin(radians)
-
-            rounded_line(
-                (center[0] + cos_angle * ray_inner, center[1] + sin_angle * ray_inner),
-                (center[0] + cos_angle * ray_outer, center[1] + sin_angle * ray_outer),
-                fill=yellow,
-                width=1.05,
-            )
-
-        draw.ellipse(
-            ((center[0] - body_radius) * scale, (center[1] - body_radius) * scale, (center[0] + body_radius) * scale, (center[1] + body_radius) * scale),
-            fill=yellow,
-        )
-
-    elif target_theme == "dark":
-        # 先绘制圆月，再用独立 alpha 遮罩挖出月牙
-        moon_mask = Image.new("L", icon.size, 0)
-        moon_draw = ImageDraw.Draw(moon_mask)
-        moon_draw.ellipse((2.2 * scale, 1.3 * scale, 13.7 * scale, 14.7 * scale), fill=255)
-        moon_draw.ellipse((5.4 * scale, 0.3 * scale, 15.3 * scale, 11.9 * scale), fill=0)
-        moon_layer = Image.new("RGBA", icon.size, blue)
-        icon.alpha_composite(Image.composite(moon_layer, Image.new("RGBA", icon.size, (0, 0, 0, 0)), moon_mask))
-
-    else:
-        # 使用类似 🌗 的双色圆形表示 “跟随系统”：左侧暖黄色代表浅色主题，右侧蓝色代表深色主题
-        bounds = (2.0 * scale, 2.0 * scale, 14.0 * scale, 14.0 * scale)
-        circle_mask = Image.new("L", icon.size, 0)
-        circle_draw = ImageDraw.Draw(circle_mask)
-        circle_draw.ellipse(bounds, fill=255)
-        system_layer = Image.new("RGBA", icon.size, (0, 0, 0, 0))
-        system_draw = ImageDraw.Draw(system_layer)
-        system_draw.rectangle((2.0 * scale, 2.0 * scale, 8.0 * scale, 14.0 * scale), fill=yellow)
-        system_draw.rectangle((8.0 * scale, 2.0 * scale, 14.0 * scale, 14.0 * scale), fill=system_dark)
-        icon.alpha_composite(Image.composite(system_layer, Image.new("RGBA", icon.size, (0, 0, 0, 0)), circle_mask))
-
-        # 中线稍微柔和地分隔明暗两侧，在较大尺寸下也更清晰
-        draw.line(
-            (8.0 * scale, 2.4 * scale, 8.0 * scale, 13.6 * scale),
-            fill=(255, 255, 255, 90),
-            width=max(round(0.35 * scale), 1),
-        )
-
-    return icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
-
-def make_theme_icon_image(target_theme: Literal["system", "light", "dark"], icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用几何图标
+def make_theme_icon_image(target_theme: Literal["system", "light", "dark"], icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用图片
     symbol = "☀️" if target_theme == "light" else "🌙" if target_theme == "dark" else "🌗"
     emoji_icon = render_system_emoji(symbol, icon_size)
     if emoji_icon is not None:
         return emoji_icon
-    return draw_theme_icon_fallback(target_theme, icon_size)
+
+    icon_mapping = { "system": "last_quarter_moon_3d.png", "light": "sun_3d.png", "dark": "crescent_moon_3d.png" }
+    with Image.open(resource_path("assets", icon_mapping[target_theme])) as icon:
+        icon_image = icon.copy()
+    icon_image.thumbnail((icon_size, icon_size), Image.Resampling.LANCZOS)
+    return icon_image
 
 def fit_cover_image(image: Image.Image, size: tuple[int, int]) -> Image.Image: # 按原始比例将封面居中放进透明画布
     cover = ImageOps.exif_transpose(image).convert("RGBA")

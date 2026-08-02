@@ -9,6 +9,7 @@
 | `logo.icns` | macOS `.app` 应用包图标 | `tchMaterial-parser.spec` 中的 `BUNDLE(icon=...)` |
 | `icon.ico` | Windows 可执行文件图标 | `tchMaterial-parser.spec` 中的 `EXE(icon=...)` |
 | `window_icon.png` | 程序运行时的窗口图标（窗口左上角、Alt+Tab，以及主界面标题旁） | `src/tchmaterial_parser.py` 直接读取，`tchMaterial-parser.spec` 负责打包 |
+| `sun_3d.png`、`crescent_moon_3d.png`、`last_quarter_moon_3d.png`（来自 [microsoft/fluentui-emoji](https://github.com/microsoft/fluentui-emoji)） | 程序右上角选择主题图标 | `src/tchmaterial_parser.py` 直接读取，`tchMaterial-parser.spec` 负责打包 |
 
 ## 更换图标时的操作
 
