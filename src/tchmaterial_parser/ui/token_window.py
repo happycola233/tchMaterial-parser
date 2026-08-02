@@ -72,7 +72,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         help_frame.pack(fill="both", expand=True)
 
         help_text = """\
-国家中小学智慧教育平台需要登录后才可获取教材，因此要使用本程序下载教材，您需要在平台内登录账号（如没有需注册），然后获得登录凭据（Access Token）。本程序仅保存该凭据至本地。
+国家中小学智慧教育平台需要登录后才可获取资源，因此要使用本程序下载资源，您需要在平台内登录账号（如没有需注册），然后获得登录凭据（Access Token）。本程序仅保存该凭据至本地。
 
 获取方法如下：
 1. 打开浏览器，访问国家中小学智慧教育平台（https://auth.smartedu.cn/uias/login）并登录账号。

@@ -93,4 +93,4 @@ body:
     id: extra
     attributes:
       label: 补充说明
-      description: 其他您认为有帮助的信息，例如出问题的教材链接（不含 Token）。
+      description: 其他您认为有帮助的信息，例如出问题的资源链接（不含 Token）。

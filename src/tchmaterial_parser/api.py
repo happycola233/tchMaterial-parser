@@ -19,13 +19,26 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
 
         if "contentId" in params:
             content_id = params["contentId"][0]
+        elif re.search(r"^https?://([^/]+)/syncClassroom/classActivity", url): # 课程资源
+            content_type = "national_lesson"
+            if "activityId" in params:
+                content_id = params["activityId"][0]
+            else:
+                return None
+        elif re.search(r"^https?://([^/]+)/qualityCourse", url): # 精品课
+            content_type = "quality_course"
+            if "courseId" in params:
+                content_id = params["courseId"][0]
+            else:
+                return None
         else:
             return None
 
-        if "contentType" in params:
-            content_type = params["contentType"][0]
-        else:
-            content_type = "assets_document"
+        if not content_type:
+            if "contentType" in params:
+                content_type = params["contentType"][0]
+            else:
+                content_type = "assets_document"
 
         # 2. 获取资源的信息
         # 返回数据示例：
@@ -60,19 +73,20 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         """
         # 其中 $.ti_items 的每一项对应一个资源
 
-        if re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对基础性作业的解析
+        if re.search(r"^https?://([^/]+)/tchMaterial/detail", url) and content_type == "assets_document": # 对普通电子课本的解析
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
+        elif content_type == "national_lesson": # 对课程资源的解析
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/national_lesson/resources/details/{content_id}.json")
+        elif content_type == "quality_course": # 对精品课的解析
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/{content_id}.json")
+        else: # 对专题课程（含电子课本、视频等）、其他类型资源的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
-        else: # 对课本的解析
-            if content_type == "thematic_course": # 对专题课程（含电子课本、视频等）的解析
-                response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
-            else: # 对普通电子课本的解析
-                response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
 
         data: dict = response.json()
 
         # 3. 获取资源标题、下载链接及章节目录
-        def get_resource_info(resource_data: dict) -> tuple[str, str, str, list[dict]] | None:
-            title: str = resource_data.get("title")
+        def get_resource_info(resource_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None:
+            title: str = f"{root_title} - {resource_data.get('title') or resource_data.get('id')}" if root_title else resource_data.get("title") or resource_data.get("id")
             resource_url: str | None = None
             resource_format = "pdf"
 
@@ -92,6 +106,24 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                     if not resource_url:
                         continue
                 break
+
+            if not resource_url: # 使用不同的判断条件寻找源文件
+                for item in resource_data["ti_items"]:
+                    if not item["ti_file_flag"] in ("source", "pdf"):
+                        continue
+
+                    resource_format = item.get("ti_format") or "pdf"
+                    if resource_format == "folder":
+                      continue
+
+                    resource_url = item.get("ti_storage")
+                    if resource_url:
+                        resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
+                    else:
+                        resource_url = next((url for url in item["ti_storages"] if url), None)
+                        if not resource_url:
+                            continue
+                    break
 
             if not resource_url:
                 return None
@@ -167,17 +199,27 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
 
             return title, resource_url, resource_format, chapters
 
-        resource_info = get_resource_info(data)
-        if resource_info:
-            resources_info.append(resource_info)
-
         if content_type == "thematic_course": # 专题课程
             resources_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/thematic_course/{content_id}/resources/list.json")
             resources_data: list[dict] = resources_resp.json()
             for resource in resources_data:
-                resource_info = get_resource_info(resource)
+                resource_info = get_resource_info(resource, data["title"])
                 if resource_info:
                     resources_info.append(resource_info)
+        elif content_type == "national_lesson": # 课程资源
+            for resource in data["relations"]["national_course_resource"]:
+                resource_info = get_resource_info(resource, data["title"])
+                if resource_info:
+                    resources_info.append(resource_info)
+        elif content_type == "quality_course": # 精品课
+            for resource in data["relations"]["course_resource"]:
+                resource_info = get_resource_info(resource, data["title"])
+                if resource_info:
+                    resources_info.append(resource_info)
+        else: # 其他类型资源
+            resource_info = get_resource_info(data)
+            if resource_info:
+                resources_info.append(resource_info)
 
         return resources_info
 

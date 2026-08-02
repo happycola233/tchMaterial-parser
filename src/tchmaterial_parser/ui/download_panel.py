@@ -62,7 +62,7 @@ def download() -> None: # 下载资源文件
             resource_urls.add(resource_url)
 
     if len(resources_info_list) > 1:
-        messagebox.showinfo("提示", "您将下载多个文件，请选择要下载文件的位置，本程序将在选定的文件夹中使用教材名称作为文件名进行下载。")
+        messagebox.showinfo("提示", "您将下载多个文件，请选择要下载文件的位置，本程序将在选定的文件夹中使用资源名称作为文件名进行下载。")
         dir_path = filedialog.askdirectory() # 选择文件夹
         if not dir_path: # 用户取消或关闭对话框
             download_btn.config(state="normal") # 恢复下载按钮为启用状态

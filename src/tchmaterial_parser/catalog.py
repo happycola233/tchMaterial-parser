@@ -31,18 +31,15 @@ class ResourceHelper: # 获取网站上资源的数据
             for book in book_data:
                 if book.get("tag_paths"): # 某些非课本资料的 tag_paths 属性为空数组
                     # 解析课本层级数据
-                    tag_paths: list[str] = book["tag_paths"][0].split("/")[2:] # 电子课本 tag_paths 的前两项为“教材”、“电子教材”
-
-                    # 如果课本层级数据不在层级数据中，跳过
-                    temp_hier = parsed_hier[book["tag_paths"][0].split("/")[1]]
-                    if not tag_paths[0] in temp_hier["children"]:
-                        continue
+                    tag_paths: list[str] = book["tag_paths"][0].split("/")
 
                     # 分别解析课本层级
-                    for p in tag_paths:
-                        if temp_hier["children"] and temp_hier["children"].get(p):
-                            temp_hier = temp_hier["children"].get(p)
-                    if not temp_hier["children"]:
+                    temp_hier = parsed_hier[tag_paths[1]]
+
+                    for p in tag_paths[2:]: # 电子课本 tag_paths 的前两项为 “教材”、“电子教材”
+                        if temp_hier.get("children") and temp_hier["children"].get(p):
+                            temp_hier = temp_hier["children"][p]
+                    if not temp_hier.get("children"):
                         temp_hier["children"] = {}
 
                     book["display_name"] = book["title"] if "title" in book else book["name"] if "name" in book else f"(未知电子课本 {book['id']})"
@@ -51,11 +48,11 @@ class ResourceHelper: # 获取网站上资源的数据
 
         return parsed_hier
 
-    def fetch_lesson_list(self) -> dict: # 获取课件列表
+    def fetch_national_lesson_list(self) -> dict: # 获取自学课件列表
         # 获取课件层级数据
         tags_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/tags/national_lesson_tag.json")
         tags_data: dict = tags_resp.json()
-        parsed_hier = self.parse_hierarchy([{ "children": [{ "tag_id": "__internal_national_lesson", "hierarchies": tags_data["hierarchies"], "tag_name": "课件资源" }] }])
+        parsed_hier = self.parse_hierarchy([{ "children": [{ "tag_id": "__internal_national_lesson", "hierarchies": tags_data["hierarchies"], "tag_name": "学生自主学习课件" }] }])
 
         # 获取课件 URL 列表
         list_resp = session.get("https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/national_lesson/teachingmaterials/version/data_version.json")
@@ -73,12 +70,48 @@ class ResourceHelper: # 获取网站上资源的数据
                     # 分别解析课件层级（tag_paths 为乱序）
                     def parse_tag_path(hier: dict) -> dict:
                         for p in tag_paths:
-                            if hier["children"] and hier["children"].get(p):
-                                return parse_tag_path(hier["children"].get(p))
+                            if hier.get("children") and hier["children"].get(p):
+                                return parse_tag_path(hier["children"][p])
                         return hier
 
                     hier = parse_tag_path(parsed_hier["__internal_national_lesson"])
-                    if not hier["children"]:
+                    if not hier.get("children"):
+                        hier["children"] = {}
+
+                    lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson['id']})"
+
+                    hier["children"][lesson["id"]] = lesson
+
+        return parsed_hier
+
+    def fetch_prepare_lesson_list(self) -> dict: # 获取备课课件列表
+        # 获取课件层级数据
+        tags_resp = session.get("https://s-file-2.ykt.cbern.com.cn/zxx/ndrs/tags/k12.json")
+        tags_data: dict = tags_resp.json()
+        parsed_hier = self.parse_hierarchy([{ "children": [{ "tag_id": "__internal_prepare_lesson", "hierarchies": tags_data["hierarchies"], "tag_name": "教师备课授课课件" }] }])
+
+        # 获取课件 URL 列表
+        list_resp = session.get("https://s-file-2.ykt.cbern.com.cn/zxx/ndrs/prepare_lesson/teachingmaterials/parts.json")
+        list_data: list[str] = list_resp.json()
+
+        # 获取课件列表
+        for url in list_data:
+            lesson_resp = session.get(url)
+            lesson_data: list[dict] = lesson_resp.json()
+            for lesson in lesson_data:
+                if lesson.get("tag_list"):
+                    # 解析课件层级数据
+                    tag_paths: list[str] = [tag["tag_id"] for tag in sorted(lesson["tag_list"], key=lambda tag: tag["order_num"])]
+
+                    # 分别解析课件层级（tag_paths 为乱序）
+                    def parse_tag_path(hier: dict) -> dict:
+                        for p in tag_paths:
+                            if hier.get("children") and hier["children"].get(p):
+                                return parse_tag_path(hier["children"][p])
+                        return hier
+
+                    hier = parse_tag_path(parsed_hier["__internal_prepare_lesson"])
+                    if not hier.get("children"):
                         hier["children"] = {}
 
                     lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson['id']})"
@@ -89,7 +122,8 @@ class ResourceHelper: # 获取网站上资源的数据
 
     def fetch_resource_list(self) -> dict: # 获取资源列表
         book_hier = self.fetch_book_list()
-        # lesson_hier = self.fetch_lesson_list()
+        # national_lesson_hier = self.fetch_national_lesson_list()
+        # prepare_lesson_hier = self.fetch_prepare_lesson_list()
         return { **book_hier }
 
 def filter_resource_items(items: dict[str, dict], query: str) -> dict[str, dict]: # 按完整分类路径筛选资源树
