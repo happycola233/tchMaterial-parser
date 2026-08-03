@@ -259,6 +259,8 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
 
 本项目基于 [MIT 许可证](LICENSE)，欢迎自由使用和二次开发。
 
+本项目使用了 [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) 中的部分图片资源，按照 [MIT 许可证](./licenses/Microsoft-Fluent-Emoji.txt)授权使用。
+
 ## 💌 友情链接
 
 - 📚 您也可以在 [ChinaTextbook](https://github.com/TapXWorld/ChinaTextbook) 项目中下载归档的电子课本 PDF。
