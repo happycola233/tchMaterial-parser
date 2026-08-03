@@ -25,6 +25,18 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                 content_id = params["activityId"][0]
             else:
                 return None
+        elif re.search(r"^https?://([^/]+)/syncClassroom/prepare/detail", url): # 备课资源（课件、教学设计等）
+            content_type = "prepare_sub_type"
+            if "resourceId" in params:
+                content_id = params["resourceId"][0]
+            else:
+                return None
+        elif re.search(r"^https?://([^/]+)/syncClassroom/detail", url): # 知识点微课等课程资源
+            if "resourceId" in params and "resourceType" in params:
+                content_id = params["resourceId"][0]
+                content_type = params["resourceType"][0]
+            else:
+                return None
         elif re.search(r"^https?://([^/]+)/qualityCourse", url): # 精品课
             content_type = "quality_course"
             if "courseId" in params:
@@ -73,14 +85,18 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         """
         # 其中 $.ti_items 的每一项对应一个资源
 
-        if re.search(r"^https?://([^/]+)/tchMaterial/detail", url) and content_type == "assets_document": # 对普通电子课本的解析
-            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
-        elif content_type == "national_lesson": # 对课程资源的解析
+        if content_type == "national_lesson": # 对课程资源的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/national_lesson/resources/details/{content_id}.json")
         elif content_type == "quality_course": # 对精品课的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/{content_id}.json")
-        else: # 对专题课程（含电子课本、视频等）、其他类型资源的解析
+        elif content_type == "prepare_sub_type": # 对备课资源的解析
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/prepare_sub_type/resources/details/{content_id}.json")
+        elif re.search(r"^https?://([^/]+)/syncClassroom/detail", url): # 知识点微课等
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/{content_type}/resources/details/{content_id}.json")
+        elif content_type == "thematic_course" or re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对专题课程、基础性作业的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
+        else: # 对普通电子课本及其他教材资源的解析
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
 
         data: dict = response.json()
 
@@ -109,7 +125,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
 
             if not resource_url: # 使用不同的判断条件寻找源文件
                 for item in resource_data["ti_items"]:
-                    if not item["ti_file_flag"] in ("source", "pdf"):
+                    if item["ti_file_flag"] not in ("source", "pdf", "ppt", "pptx", "doc", "docx"):
                         continue
 
                     resource_format = item.get("ti_format") or "pdf"
@@ -206,16 +222,14 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                 resource_info = get_resource_info(resource, data["title"])
                 if resource_info:
                     resources_info.append(resource_info)
-        elif content_type == "national_lesson": # 课程资源
-            for resource in data["relations"]["national_course_resource"]:
-                resource_info = get_resource_info(resource, data["title"])
-                if resource_info:
-                    resources_info.append(resource_info)
-        elif content_type == "quality_course": # 精品课
-            for resource in data["relations"]["course_resource"]:
-                resource_info = get_resource_info(resource, data["title"])
-                if resource_info:
-                    resources_info.append(resource_info)
+        elif data.get("relations"): # 课程包等多资源页面（含导学案、课件、PPT 等）
+            for resources in data["relations"].values():
+                if not isinstance(resources, list):
+                    continue
+                for resource in resources:
+                    resource_info = get_resource_info(resource, data.get("title"))
+                    if resource_info:
+                        resources_info.append(resource_info)
         else: # 其他类型资源
             resource_info = get_resource_info(data)
             if resource_info:
