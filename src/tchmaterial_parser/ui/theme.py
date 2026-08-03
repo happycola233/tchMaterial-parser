@@ -27,12 +27,17 @@ THEME_COLORS = {
 ACCENT_BUTTON_STYLE = "Accent.TButton"
 SWITCH_STYLE = "Switch.TCheckbutton"
 
-# 本程序使用的命名字体，格式为 字体名称: (基准字号（像素）, 是否加粗)
-APP_FONTS = { "AppCaptionFont": (12, False), "AppBodyFont": (14, False), "AppStrongFont": (14, True), "AppTitleFont": (20, True) }
+# 本程序使用的命名字体，格式为 字体名称: (基准字号（像素）, 是否加粗, 是否添加下划线)
+APP_FONTS = {
+    "AppCaptionFont": (12, False, False), "AppBodyFont": (14, False, False), "AppStrongFont": (14, True, False),
+    "AppTitleFont": (20, True, False), "AppLinkFont": (12, False, True)
+}
 # sv-ttk 内置的命名字体，需要一并改为中文字体（其默认字体不含中文字形），基准字号与 sv-ttk 原始取值保持一致
 SV_FONTS = {
-    "SunValleyCaptionFont": (12, False), "SunValleyBodyFont": (14, False), "SunValleyBodyStrongFont": (14, True), "SunValleyBodyLargeFont": (18, False),
-    "SunValleySubtitleFont": (20, True), "SunValleyTitleFont": (28, True), "SunValleyTitleLargeFont": (40, True), "SunValleyDisplayFont": (68, True),
+    "SunValleyCaptionFont": (12, False, False), "SunValleyBodyFont": (14, False, False),
+    "SunValleyBodyStrongFont": (14, True, False), "SunValleyBodyLargeFont": (18, False, False),
+    "SunValleySubtitleFont": (20, True, False), "SunValleyTitleFont": (28, True, False),
+    "SunValleyTitleLargeFont": (40, True, False), "SunValleyDisplayFont": (68, True, False),
 }
 
 def bind_font_family(family: str) -> None: # 由 app.py 在选定界面字体后写入，供 setup_fonts() 使用
@@ -57,9 +62,9 @@ def pick_ui_font_family() -> str: # 选择一个合适的字体
 def setup_fonts() -> None: # 创建（或更新）所有命名字体，使其使用中文字体并跟随缩放因子
     # 此处直接调用 Tcl 命令而不使用 tkinter.font.Font，因为后者创建的字体会随 Python 对象被垃圾回收而一并删除
     existing_fonts: tuple[str, ...] = runtime.root.tk.splitlist(runtime.root.tk.call("font", "names"))
-    for name, (size, bold) in { **APP_FONTS, **SV_FONTS }.items():
+    for name, (size, bold, underline) in { **APP_FONTS, **SV_FONTS }.items():
         # 字号取负值表示以像素为单位，从而避开 tk scaling 的二次缩放，与 sv-ttk 的取值方式保持一致
-        options = ("-family", ui_font_family, "-size", -scaled(size), "-weight", "bold" if bold else "normal")
+        options = ("-family", ui_font_family, "-size", -scaled(size), "-weight", "bold" if bold else "normal", "-underline", 1 if underline else 0)
         runtime.root.tk.call("font", "configure" if name in existing_fonts else "create", name, *options)
 
 def detect_system_theme() -> Literal["light", "dark"]: # 获取系统当前使用的是浅色还是深色模式

@@ -10,9 +10,10 @@ from PIL import Image, ImageTk
 from . import __version__
 from .catalog import ResourceHelper
 from .config import load_access_token, load_config, save_config
-from .images import make_theme_icon_image, render_system_emoji
+from .images import make_icon_image, render_system_emoji
 from .platform_utils import ctypes, os_name, print_error, resource_path, win32api, win32con, win32gui, win32print
 from .ui import download_panel, runtime, theme
+from .ui.about_window import show_about_window
 from .ui.resource_tree import build_resource_tree
 from .ui.runtime import scaled
 from .ui.token_window import show_access_token_window
@@ -130,7 +131,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     container_frame = ttk.Frame(root, padding=(scaled(24), scaled(18))) # 通过内边距在窗口四周留白
     container_frame.pack(expand=True, fill="both")
 
-    # 顶部：左侧为图标与标题，右侧为主题切换按钮
+    # 顶部：左侧为图标与标题，右侧为关于、主题切换按钮
     header_frame = ttk.Frame(container_frame)
     header_frame.pack(fill="x")
 
@@ -154,7 +155,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     def update_theme_button() -> None: # 更新按钮文字与图标，使其表示点击后将切换到的主题
         if theme.switched_theme not in theme_icons:
             icon_size = max(scaled(16), 16)
-            theme_icons[theme.switched_theme] = ImageTk.PhotoImage(make_theme_icon_image(theme.switched_theme, icon_size))
+            theme_icons[theme.switched_theme] = ImageTk.PhotoImage(make_icon_image(theme.switched_theme, icon_size))
         theme_btn.config(
             text=" 浅色" if theme.switched_theme == "light" else " 深色" if theme.switched_theme == "dark" else " 跟随系统",
             image=theme_icons[theme.switched_theme],
@@ -167,8 +168,17 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
         theme.apply_theme(target_theme)
         update_theme_button()
 
-    theme_btn = ttk.Button(header_frame, style="Toolbutton", command=switch_theme)
-    theme_btn.pack(side="right", anchor="n")
+    header_actions = ttk.Frame(header_frame)
+    header_actions.pack(side="right", anchor="n")
+
+    # 关于按钮
+    about_image = ImageTk.PhotoImage(make_icon_image("about", max(scaled(16), 16)))
+    about_btn = ttk.Button(header_actions, text=" 关于", image=about_image, compound="left", style="Toolbutton", command=show_about_window)
+    about_btn.pack(side="left", padx=(0, scaled(8)))
+
+    # 切换主题按钮
+    theme_btn = ttk.Button(header_actions, style="Toolbutton", command=switch_theme)
+    theme_btn.pack(side="left")
     update_theme_button()
 
     # 功能说明

@@ -93,14 +93,13 @@ def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # �
                 continue
     return None
 
-def make_theme_icon_image(target_theme: Literal["system", "light", "dark"], icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用图片
-    symbol = "☀️" if target_theme == "light" else "🌙" if target_theme == "dark" else "🌗"
-    emoji_icon = render_system_emoji(symbol, icon_size)
+def make_icon_image(icon_name: Literal["system", "light", "dark", "about"], icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用图片
+    icon_mapping = { "system": ("🌗", "last_quarter_moon_3d.png"), "light": ("☀️", "sun_3d.png"), "dark": ("🌙", "crescent_moon_3d.png"), "about": ("ℹ️", "information_3d.png") }
+    emoji_icon = render_system_emoji(icon_mapping[icon_name][0], icon_size)
     if emoji_icon is not None:
         return emoji_icon
 
-    icon_mapping = { "system": "last_quarter_moon_3d.png", "light": "sun_3d.png", "dark": "crescent_moon_3d.png" }
-    with Image.open(resource_path("assets", icon_mapping[target_theme])) as icon:
+    with Image.open(resource_path("assets", icon_mapping[icon_name][1])) as icon:
         icon_image = icon.copy()
     icon_image.thumbnail((icon_size, icon_size), Image.Resampling.LANCZOS)
     return icon_image

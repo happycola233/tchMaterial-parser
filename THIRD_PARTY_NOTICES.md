@@ -9,10 +9,10 @@ Copyright (c) Microsoft Corporation.
 Licensed under the MIT License.
 
 Source:
-https://github.com/microsoft/fluentui-emoji
+<https://github.com/microsoft/fluentui-emoji>
 
 Modifications:
 None
 
 The full license text is included in:
-licenses/Microsoft-Fluent-Emoji.txt
+[licenses/Microsoft-Fluent-Emoji.txt](./licenses/Microsoft-Fluent-Emoji.txt)

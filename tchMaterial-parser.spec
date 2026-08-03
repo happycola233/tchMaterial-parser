@@ -9,9 +9,10 @@ is_mac = sys.platform.startswith('darwin')
 # 下面 4 个图标文件是程序运行时读取的自有资源，目标目录保持为 assets/，与源码中的相对路径一致
 data_files = collect_data_files('sv_ttk') + [
     ('assets/window_icon.png', 'assets'),
+    ('assets/last_quarter_moon_3d.png', 'assets'),
     ('assets/sun_3d.png', 'assets'),
     ('assets/crescent_moon_3d.png', 'assets'),
-    ('assets/last_quarter_moon_3d.png', 'assets'),
+    ('assets/information_3d.png', 'assets'),
 ]
 
 a = Analysis(

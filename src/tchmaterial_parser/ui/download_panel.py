@@ -121,7 +121,7 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
                         ui_call(progress_label.config, text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
 
             if current_state["total_size"] > 0 and current_state["downloaded_size"] != current_state["total_size"]: # 文件下载不完整
-                current_state["failed_reason"] = f"文件下载不完整，需下载 {current_state["total_size"]} 字节，实际下载 {current_state["downloaded_size"]} 字节"
+                current_state["failed_reason"] = f"文件下载不完整，需下载 {current_state['total_size']} 字节，实际下载 {current_state['downloaded_size']} 字节"
                 current_state["downloaded_size"], current_state["total_size"] = 0, 0
                 current_state["finished"] = True
                 try:

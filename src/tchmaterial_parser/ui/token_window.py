@@ -17,6 +17,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     # 让窗口自动根据控件自适应尺寸；如需最小尺寸可用 token_window.minsize(...)
     token_window.focus() # 自动获得焦点
     token_window.grab_set() # 阻止主窗口操作
+    token_window.transient(runtime.root) # 使窗口依赖于主窗口
     token_window.bind("<Escape>", lambda event: token_window.destroy()) # 绑定 Esc 键关闭窗口
 
     # 设置一个 Frame 用于留白，使布局更美观
@@ -64,9 +65,8 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         help_win.title("获取 Access Token 方法")
         help_win.resizable(False, False) # 禁止调整窗口大小
         help_win.focus() # 自动获得焦点
-        help_win.grab_set() # 阻止主窗口操作
+        help_win.transient(token_window) # 使窗口依赖于主窗口
         help_win.bind("<Escape>", lambda event: help_win.destroy()) # 绑定 Esc 键关闭窗口
-        help_win.bind("<Destroy>", lambda event: token_window.grab_set())
 
         help_frame = ttk.Frame(help_win, padding=scaled(20))
         help_frame.pack(fill="both", expand=True)
