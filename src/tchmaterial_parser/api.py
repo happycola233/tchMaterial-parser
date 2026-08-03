@@ -85,6 +85,33 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         data: dict = response.json()
 
         # 3. 获取资源标题、下载链接及章节目录
+        def get_audio_info(audio_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None: # 解析教材关联的音频资源（如英语教材听力）
+            # 音频资源的标题存放在 global_title 字典中（键为语言代码，如 zh-CN）
+            title_data = audio_data.get("global_title")
+            audio_title = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or audio_data.get("title") or audio_data.get("id")
+            title: str = f"{root_title} - {audio_title}" if root_title else audio_title
+            resource_url: str | None = None
+            resource_format = "mp3"
+
+            # 优先选择转码后的 MP3 文件（ti_file_flag 为 href），否则回退到源文件
+            for item in audio_data["ti_items"]:
+                if item.get("ti_file_flag") not in ("href", "source") or item.get("ti_format") != "mp3":
+                    continue
+
+                resource_url = item.get("ti_storage") # 获取并构造资源的 URL
+                if resource_url:
+                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
+                else:
+                    resource_url = next((url for url in item.get("ti_storages") or [] if url), None)
+                if resource_url:
+                    resource_format = item.get("ti_format") or "mp3"
+                    break
+
+            if not resource_url:
+                return None
+
+            return title, resource_url, resource_format, []
+
         def get_resource_info(resource_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None:
             title: str = f"{root_title} - {resource_data.get('title') or resource_data.get('id')}" if root_title else resource_data.get("title") or resource_data.get("id")
             resource_url: str | None = None
@@ -220,6 +247,17 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
             resource_info = get_resource_info(data)
             if resource_info:
                 resources_info.append(resource_info)
+
+            if content_type == "assets_document": # 教材可能带有配套的音频资源（如英语教材听力）
+                try:
+                    audios_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/{content_id}/relation_audios.json")
+                    audios_data: list[dict] = audios_resp.json()
+                    for audio in audios_data:
+                        audio_info = get_audio_info(audio, data.get("title"))
+                        if audio_info:
+                            resources_info.append(audio_info)
+                except Exception: # 音频资源不是必需的，获取失败时直接跳过
+                    pass
 
         return resources_info
 
