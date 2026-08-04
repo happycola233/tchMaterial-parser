@@ -11,9 +11,9 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "肥宅水水呀"}, {name = "晨叶梦春", email = "wuziqian211@126.com"}]
 dependencies = [
-    "pillow>=10,<12",
+    "pillow>=10,<13",
     "psutil>=5.9,<8",
-    "pypdf>=5,<6",
+    "pypdf>=5,<7",
     "pyperclip>=1.8,<2",
     "requests>=2.31,<3",
     "sv-ttk>=2.6,<3",
