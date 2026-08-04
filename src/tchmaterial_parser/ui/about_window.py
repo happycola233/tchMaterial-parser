@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 关于窗口：展示程序、作者、项目地址与第三方许可证信息
+# 关于窗口：展示程序、作者、项目地址与许可证信息
 
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -85,7 +85,7 @@ def show_about_window() -> None: # 打开关于窗口
     ttk.Label(title_frame, text= "国家中小学智慧教育平台 资源下载工具", style="Title.TLabel").pack(anchor="w")
     ttk.Label(title_frame, text=f"版本 {__version__}", style="Caption.TLabel").pack(anchor="w", pady=(scaled(3), 0))
 
-    # 作者与项目地址
+    # 作者、项目地址与许可证
     info_card = make_card(frame, padding=(scaled(16), scaled(12)))
     info_card.pack(fill="x", pady=(scaled(18), 0))
     info_card.columnconfigure(1, weight=1)
@@ -118,7 +118,7 @@ def show_about_window() -> None: # 打开关于窗口
         text="本软件使用了 Microsoft Fluent Emoji 的部分图像资源，依据 MIT 许可证授权使用。\n相关图像资源及其版权归 Microsoft 所有。",
         style="AboutCard.TLabel",
         justify="left",
-        wraplength=scaled(600),
+        wraplength=scaled(720),
     ).pack(anchor="w", pady=(scaled(6), 0))
     license_link = make_link(license_card, "查看 Microsoft Fluent Emoji 许可证 ↗", FLUENT_EMOJI_LICENSE_URL, about_window)
     license_link.pack(anchor="w", pady=(scaled(8), 0))
@@ -129,10 +129,10 @@ def show_about_window() -> None: # 打开关于窗口
     ttk.Label(notice_card, text="声明", style="AboutCardStrong.TLabel").pack(anchor="w")
     ttk.Label(
         notice_card,
-        text="本软件采用 MIT 许可证开源，官方版本永久免费。\n谨防第三方付费倒卖、捆绑软件或冒充官方等行为；任何再分发行为均须保留原有版权及许可证声明。",
+        text="本软件仅作为国家中小学智慧教育平台资源访问、解析与下载的辅助工具。\n本项目不对相关平台资源主张任何权利；相关资源的著作权及其他合法权利归资源提供者或其他相关权利人所有。\n用户应在法律法规、平台规则及权利人授权允许的范围内，将相关资源用于个人学习与教学参考。\n本项目为非官方第三方项目，与国家中小学智慧教育平台及其主管、运营单位不存在隶属、授权、认可或合作关系。\n\n本软件代码采用 MIT 许可证开源，官方版本始终免费提供。\n请警惕冒充官方、捆绑软件或以付费倒卖方式误导用户的行为。\n第三方再分发本软件时，须遵守 MIT 许可证并保留原有版权和许可声明。",
         style="AboutCard.TLabel",
         justify="left",
-        wraplength=scaled(600),
+        wraplength=scaled(720),
     ).pack(anchor="w", pady=(scaled(6), 0))
 
     button_frame = ttk.Frame(frame)

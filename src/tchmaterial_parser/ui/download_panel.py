@@ -108,17 +108,18 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
                 for chunk in response.iter_content( # 分块下载
                     chunk_size=131072 if current_state["total_size"] < 20971520 else 262144 if current_state["total_size"] < 52428800 else 524288
                 ):
-                    file.write(chunk)
-                    current_state["downloaded_size"] += len(chunk)
-                    all_downloaded_size = sum(state["downloaded_size"] for state in download_states)
-                    all_total_size = sum(state["total_size"] for state in download_states)
-                    downloaded_number = len([state for state in download_states if state["finished"]])
-                    total_number = len(download_states)
+                    if chunk: # 过滤掉 Keep-Alive 块
+                        file.write(chunk)
+                        current_state["downloaded_size"] += len(chunk)
+                        all_downloaded_size = sum(state["downloaded_size"] for state in download_states)
+                        all_total_size = sum(state["total_size"] for state in download_states)
+                        downloaded_number = len([state for state in download_states if state["finished"]])
+                        total_number = len(download_states)
 
-                    if all_total_size > 0: # 防止下面一行代码除以 0 而报错
-                        download_progress = (all_downloaded_size / all_total_size) * 100
-                        ui_call(download_progress_bar.config, value=download_progress) # 更新进度条
-                        ui_call(progress_label.config, text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
+                        if all_total_size > 0: # 防止下面一行代码除以 0 而报错
+                            download_progress = (all_downloaded_size / all_total_size) * 100
+                            ui_call(download_progress_bar.config, value=download_progress) # 更新进度条
+                            ui_call(progress_label.config, text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
 
             if current_state["total_size"] > 0 and current_state["downloaded_size"] != current_state["total_size"]: # 文件下载不完整
                 current_state["failed_reason"] = f"文件下载不完整，需下载 {current_state['total_size']} 字节，实际下载 {current_state['downloaded_size']} 字节"
