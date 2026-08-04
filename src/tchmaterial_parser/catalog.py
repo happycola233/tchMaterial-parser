@@ -42,7 +42,7 @@ class ResourceHelper: # 获取网站上资源的数据
                     if not temp_hier.get("children"):
                         temp_hier["children"] = {}
 
-                    book["display_name"] = book["title"] if "title" in book else book["name"] if "name" in book else f"(未知电子课本 {book['id']})"
+                    book["display_name"] = book.get("title") or book.get("name") or f"(未知电子课本 {book['id']})"
 
                     temp_hier["children"][book["id"]] = book
 
@@ -78,7 +78,7 @@ class ResourceHelper: # 获取网站上资源的数据
                     if not hier.get("children"):
                         hier["children"] = {}
 
-                    lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson['id']})"
+                    lesson["display_name"] = lesson.get("title") or lesson.get("name") or f"(未知课件 {lesson['id']})"
 
                     hier["children"][lesson["id"]] = lesson
 
@@ -114,7 +114,7 @@ class ResourceHelper: # 获取网站上资源的数据
                     if not hier.get("children"):
                         hier["children"] = {}
 
-                    lesson["display_name"] = lesson["title"] if "title" in lesson else lesson["name"] if "name" in lesson else f"(未知课件 {lesson['id']})"
+                    lesson["display_name"] = lesson.get("title") or lesson.get("name") or f"(未知课件 {lesson['id']})"
 
                     hier["children"][lesson["id"]] = lesson
 

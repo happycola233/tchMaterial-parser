@@ -64,21 +64,34 @@ def setup_fonts() -> None: # 创建（或更新）所有命名字体，使其使
     existing_fonts: tuple[str, ...] = runtime.root.tk.splitlist(runtime.root.tk.call("font", "names"))
     for name, (size, bold, underline) in { **APP_FONTS, **SV_FONTS }.items():
         # 字号取负值表示以像素为单位，从而避开 tk scaling 的二次缩放，与 sv-ttk 的取值方式保持一致
-        options = ("-family", ui_font_family, "-size", -scaled(size), "-weight", "bold" if bold else "normal", "-underline", 1 if underline else 0)
+        options = (
+            "-family", ui_font_family,
+            "-size", -scaled(size),
+            "-weight", "bold" if bold else "normal",
+            "-underline", 1 if underline else 0
+        )
         runtime.root.tk.call("font", "configure" if name in existing_fonts else "create", name, *options)
 
 def detect_system_theme() -> Literal["light", "dark"]: # 获取系统当前使用的是浅色还是深色模式
     try:
         if os_name == "Windows" and winreg: # 在 Windows 上，读取注册表中的个性化设置
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize") as key:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+            ) as key:
                 apps_use_light_theme, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
             return "light" if apps_use_light_theme else "dark"
         elif os_name == "Darwin": # 在 macOS 上，读取全局偏好设置（仅深色模式下存在 AppleInterfaceStyle 项，其值为 Dark）
-            result = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"], capture_output=True, text=True, timeout=2)
+            result = subprocess.run(
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                capture_output=True, text=True, timeout=2
+            )
             return "dark" if result.stdout.strip() == "Dark" else "light"
         elif os_name == "Linux": # 在 Linux 上，读取 GNOME 的配色方案设置（其值形如 "prefer-dark"）
             try:
-                result = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"], capture_output=True, text=True, timeout=2)
+                result = subprocess.run(
+                    ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                    capture_output=True, text=True, timeout=2
+                )
             except FileNotFoundError: # 非 GNOME 桌面环境多半没有 gsettings，此时无从判断，按浅色处理
                 return "light"
             return "dark" if "dark" in result.stdout.lower() else "light"
@@ -110,9 +123,17 @@ def register_themed_widget(widget: tk.Widget) -> None: # 登记需要跟随主�
 
 def apply_widget_theme(widget: tk.Widget) -> None: # 为单个 tk 原生控件应用当前主题配色
     if isinstance(widget, tk.Menu):
-        widget.configure(background=current_colors["page"], foreground=current_colors["fg"], activebackground=current_colors["selbg"], activeforeground=current_colors["selfg"], activeborderwidth=0, borderwidth=0, relief="flat")
+        widget.configure(
+            background=current_colors["page"], foreground=current_colors["fg"],
+            activebackground=current_colors["selbg"], activeforeground=current_colors["selfg"],
+            activeborderwidth=0, borderwidth=0, relief="flat",
+        )
     elif isinstance(widget, tk.Text):
-        widget.configure(background=current_colors["surface"], foreground=current_colors["fg"], insertbackground=current_colors["fg"], selectbackground=current_colors["selbg"], selectforeground=current_colors["selfg"], borderwidth=0, relief="flat", highlightthickness=0)
+        widget.configure(
+            background=current_colors["surface"], foreground=current_colors["fg"],
+            insertbackground=current_colors["fg"], selectbackground=current_colors["selbg"],
+            selectforeground=current_colors["selfg"], borderwidth=0, relief="flat", highlightthickness=0,
+        )
 
 def apply_theme(theme: Literal["system", "light", "dark"]) -> None: # 应用浅色/深色主题
     global switched_theme, current_theme, current_colors

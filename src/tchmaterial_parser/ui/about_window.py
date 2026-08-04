@@ -91,20 +91,20 @@ def show_about_window() -> None: # 打开关于窗口
     info_card.columnconfigure(1, weight=1)
 
     ttk.Label(info_card, text="作者", style="AboutCardMuted.TLabel").grid(
-        row=0, column=0, sticky="nw", padx=(0, scaled(16))
+        row=0, column=0, sticky="nw", padx=(0, scaled(16)),
     )
     ttk.Label(info_card, text="肥宅水水呀、晨叶梦春 及其他贡献者", style="AboutCard.TLabel").grid(
-        row=0, column=1, sticky="nw"
+        row=0, column=1, sticky="nw",
     )
 
     ttk.Label(info_card, text="仓库", style="AboutCardMuted.TLabel").grid(
-        row=1, column=0, sticky="nw", padx=(0, scaled(16)), pady=(scaled(8), 0)
+        row=1, column=0, sticky="nw", padx=(0, scaled(16)), pady=(scaled(8), 0),
     )
     project_link = make_link(info_card, "happycola233/tchMaterial-parser", PROJECT_URL, about_window)
     project_link.grid(row=1, column=1, sticky="nw", pady=(scaled(8), 0))
 
     ttk.Label(info_card, text="许可证", style="AboutCardMuted.TLabel").grid(
-        row=2, column=0, sticky="nw", padx=(0, scaled(16)), pady=(scaled(8), 0)
+        row=2, column=0, sticky="nw", padx=(0, scaled(16)), pady=(scaled(8), 0),
     )
     license_link = make_link(info_card, "MIT License", LICENSE_URL, about_window)
     license_link.grid(row=2, column=1, sticky="nw", pady=(scaled(8), 0))
@@ -138,7 +138,7 @@ def show_about_window() -> None: # 打开关于窗口
     button_frame = ttk.Frame(frame)
     button_frame.pack(fill="x", pady=(scaled(16), 0))
     ttk.Button(
-        button_frame, text="关闭", style=theme.ACCENT_BUTTON_STYLE, command=about_window.destroy
+        button_frame, text="关闭", style=theme.ACCENT_BUTTON_STYLE, command=about_window.destroy,
     ).pack(side="right")
 
     center_window(about_window, runtime.root)

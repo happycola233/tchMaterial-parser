@@ -38,7 +38,10 @@ def parse_and_copy() -> None: # 解析并复制链接
 
     if resource_urls:
         pyperclip.copy("\n".join(resource_urls)) # 将链接复制到剪贴板
-        messagebox.showinfo("提示", f'资源链接已复制到剪贴板。\n注意：链接可能无法直接下载，需要加上以下 HTTP 标头才能下载{"（以下标头含有隐私信息，请勿分享给别人）" if config.access_token else ""}：\n\nAuthorization: Bearer {config.access_token or "0"}\nX-ND-AUTH: MAC id="{config.access_token or "0"}",nonce="0",mac="0"')
+        messagebox.showinfo(
+            "提示",
+            f'资源链接已复制到剪贴板。\n注意：链接可能无法直接下载，需要加上以下 HTTP 标头才能下载{"（以下标头含有隐私信息，请勿分享给别人）" if config.access_token else ""}：\n\nAuthorization: Bearer {config.access_token or "0"}\nX-ND-AUTH: MAC id="{config.access_token or "0"}",nonce="0",mac="0"'
+        )
 
 def download() -> None: # 下载资源文件
     global download_states
@@ -77,7 +80,11 @@ def download() -> None: # 下载资源文件
         if dir_path:
             save_path = os.path.join(dir_path, f"{default_filename}.{resource_format}") # 构造完整路径
         else:
-            save_path = filedialog.asksaveasfilename(defaultextension=f".{resource_format}", filetypes=[(f"{resource_format.upper()} 文件", f"*.{resource_format}"), ("所有文件", "*.*")], initialfile=default_filename) # 选择保存路径
+            save_path = filedialog.asksaveasfilename( # 选择保存路径
+                defaultextension=f".{resource_format}",
+                filetypes=[(f"{resource_format.upper()} 文件", f"*.{resource_format}"), ("所有文件", "*.*")],
+                initialfile=default_filename
+            )
             if not save_path: # 用户取消了文件保存操作
                 download_btn.config(state="normal") # 恢复下载按钮为启用状态
                 return

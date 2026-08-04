@@ -186,7 +186,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                                     page_num: int | None = next((m["page_number"] for m in page_map if m["node_id"] == node["id"]), None)
                                     chapter_item = {
                                         "title": node["title"],
-                                        "page_index": page_num
+                                        "page_index": page_num,
                                     }
 
                                     # 如果有子节点，递归处理
@@ -208,7 +208,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                             for i, m in enumerate(page_map):
                                 chapters.append({
                                     "title": f"第 {i+1} 节 (P{m['page_number']})",
-                                    "page_index": m["page_number"]
+                                    "page_index": m["page_number"],
                                 })
 
                 except Exception as e:

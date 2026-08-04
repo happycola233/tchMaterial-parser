@@ -94,7 +94,12 @@ def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # �
     return None
 
 def make_icon_image(icon_name: Literal["system", "light", "dark", "about"], icon_size: int) -> Image.Image: # 优先使用系统 Emoji 的原始字形，无法渲染时使用图片
-    icon_mapping = { "system": ("🌗", "last_quarter_moon_3d.png"), "light": ("☀️", "sun_3d.png"), "dark": ("🌙", "crescent_moon_3d.png"), "about": ("ℹ️", "information_3d.png") }
+    icon_mapping = {
+        "system": ("🌗", "last_quarter_moon_3d.png"),
+        "light": ("☀️", "sun_3d.png"),
+        "dark": ("🌙", "crescent_moon_3d.png"),
+        "about": ("ℹ️", "information_3d.png")
+    }
     emoji_icon = render_system_emoji(icon_mapping[icon_name][0], icon_size)
     if emoji_icon is not None:
         return emoji_icon

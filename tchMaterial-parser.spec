@@ -51,7 +51,7 @@ if is_mac:
         codesign_identity=None,
         entitlements_file=None,
     )
-    
+
     coll = COLLECT(
         exe,
         a.binaries,
@@ -61,7 +61,7 @@ if is_mac:
         upx_exclude=[],
         name='tchMaterial-parser',
     )
-    
+
     app = BUNDLE(
         coll,
         name='tchMaterial-parser.app',
