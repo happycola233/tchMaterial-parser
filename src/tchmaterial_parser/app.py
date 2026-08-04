@@ -17,7 +17,7 @@ from .ui.about_window import show_about_window
 from .ui.resource_tree import build_resource_tree
 from .ui.runtime import scaled
 from .ui.token_window import show_access_token_window
-from .ui.widgets import auto_hide_scrollbar, bind_context_menu, bind_tab_navigation, center_window, make_card
+from .ui.widgets import auto_hide_scrollbar, bind_context_menu, bind_tab_navigation, center_window
 
 # 主界面上方的功能说明：Emoji 与正文分开渲染以保留系统字体的完整字形
 DESCRIPTION_ITEMS = (
@@ -185,7 +185,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     description_padding = scaled(14)
     description_icon_gap = scaled(8)
     description_icon_size = max(scaled(18), 18)
-    description_card = make_card(container_frame, padding=(description_padding, scaled(10)))
+    description_card = ttk.Frame(container_frame, style="Card.TFrame", padding=(description_padding, scaled(10)))
     description_card.pack(fill="x", pady=(scaled(14), 0))
     description_card.columnconfigure(1, weight=1)
 
@@ -239,7 +239,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
 
     url_label = ttk.Label(text_pane, text="资源页面网址", style="Heading.TLabel") # 添加 URL 标签
     url_label.grid(row=0, column=0, sticky="w", pady=(0, scaled(6)))
-    url_card = make_card(text_pane) # 外面套一层卡片，使输入框拥有与树视图一致的圆角边框
+    url_card = ttk.Frame(text_pane, style="Card.TFrame") # 外面套一层卡片，使输入框拥有与树视图一致的圆角边框
     url_card.grid(row=1, column=0, sticky="nsew")
     url_text = tk.Text(url_card, width=40, height=8, wrap="char", undo=True, font="AppBodyFont", padx=scaled(6), pady=scaled(4)) # 添加 URL 输入框
     url_text.pack(fill="both", expand=True)

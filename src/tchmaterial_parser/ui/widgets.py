@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 通用控件辅助：卡片容器、右键菜单、滚动条自动隐藏、Tab 键导航与窗口居中
+# 通用控件辅助：右键菜单、滚动条自动隐藏、Tab 键导航与窗口居中
 
 import tkinter as tk
 from tkinter import ttk
@@ -8,9 +8,6 @@ from typing import Literal
 from . import runtime
 from .theme import register_themed_widget
 from ..platform_utils import os_name
-
-def make_card(parent: tk.Widget, **kwargs: dict) -> ttk.Frame: # 创建卡片式容器，用于给 tk 原生控件加上圆角边框
-    return ttk.Frame(parent, style="Card.TFrame", **kwargs)
 
 def bind_context_menu(parent: tk.Widget, type: Literal["normal", "noundo", "readonly"] = "normal") -> None: # 创建右键菜单
     context_menu = tk.Menu(parent, tearoff=0, font="AppBodyFont")

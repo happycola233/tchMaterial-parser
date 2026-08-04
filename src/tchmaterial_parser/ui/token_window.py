@@ -7,7 +7,7 @@ from tkinter import ttk, messagebox
 from . import runtime
 from .runtime import scaled
 from .theme import ACCENT_BUTTON_STYLE, apply_titlebar_theme, register_themed_widget
-from .widgets import bind_context_menu, bind_tab_navigation, center_window, make_card
+from .widgets import bind_context_menu, bind_tab_navigation, center_window
 from .. import config
 
 def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
@@ -31,7 +31,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     hint_label.pack(anchor="w", pady=(scaled(2), scaled(10)))
 
     # 创建多行 Text（外面套一层卡片，以获得与其他控件一致的圆角边框）
-    token_card = make_card(frame)
+    token_card = ttk.Frame(frame, style="Card.TFrame")
     token_card.pack(fill="both", expand=True)
     token_text = tk.Text(token_card, width=50, height=4, wrap="char", undo=True, font="AppBodyFont", padx=scaled(6), pady=scaled(4))
     token_text.pack(fill="both", expand=True)
@@ -93,7 +93,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
 然后在控制台输出中即可看到 Access Token。将其复制后粘贴到本程序中。"""
 
         # 只读文本区，支持选择复制（外面套一层卡片，以获得与其他控件一致的圆角边框）
-        help_card = make_card(help_frame)
+        help_card = ttk.Frame(help_frame, style="Card.TFrame")
         help_card.pack(fill="both", expand=True)
         txt = tk.Text(help_card, width=88, height=24, wrap="word", font="AppCaptionFont", padx=scaled(4), pady=scaled(4))
         txt.insert("1.0", help_text)

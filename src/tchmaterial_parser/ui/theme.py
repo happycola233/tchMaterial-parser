@@ -110,7 +110,7 @@ def register_themed_widget(widget: tk.Widget) -> None: # 登记需要跟随主�
 
 def apply_widget_theme(widget: tk.Widget) -> None: # 为单个 tk 原生控件应用当前主题配色
     if isinstance(widget, tk.Menu):
-        widget.configure(background=current_colors["surface"], foreground=current_colors["fg"], activebackground=current_colors["selbg"], activeforeground=current_colors["selfg"], activeborderwidth=0, borderwidth=0, relief="flat")
+        widget.configure(background=current_colors["page"], foreground=current_colors["fg"], activebackground=current_colors["selbg"], activeforeground=current_colors["selfg"], activeborderwidth=0, borderwidth=0, relief="flat")
     elif isinstance(widget, tk.Text):
         widget.configure(background=current_colors["surface"], foreground=current_colors["fg"], insertbackground=current_colors["fg"], selectbackground=current_colors["selbg"], selectforeground=current_colors["selfg"], borderwidth=0, relief="flat", highlightthickness=0)
 

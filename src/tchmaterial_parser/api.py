@@ -85,7 +85,9 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         """
         # 其中 $.ti_items 的每一项对应一个资源
 
-        if content_type == "national_lesson": # 对课程资源的解析
+        if re.search(r"^https?://([^/]+)/tchMaterial/detail", url) and content_type == "assets_document": # 对普通电子课本的解析
+            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
+        elif content_type == "national_lesson": # 对课程资源的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/national_lesson/resources/details/{content_id}.json")
         elif content_type == "quality_course": # 对精品课的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/{content_id}.json")
@@ -93,43 +95,16 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/prepare_sub_type/resources/details/{content_id}.json")
         elif re.search(r"^https?://([^/]+)/syncClassroom/detail", url): # 知识点微课等
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/{content_type}/resources/details/{content_id}.json")
-        elif content_type == "thematic_course" or re.search(r"^https?://([^/]+)/syncClassroom/basicWork/detail", url): # 对专题课程、基础性作业的解析
+        else: # 对专题课程（含电子课本、视频等）、其他类型资源的解析
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
-        else: # 对普通电子课本及其他教材资源的解析
-            response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{content_id}.json")
 
         data: dict = response.json()
 
         # 3. 获取资源标题、下载链接及章节目录
-        def get_audio_info(audio_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None: # 解析教材关联的音频资源（如英语教材听力）
-            # 音频资源的标题存放在 global_title 字典中（键为语言代码，如 zh-CN）
-            title_data = audio_data.get("global_title")
-            audio_title = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or audio_data.get("title") or audio_data.get("id")
-            title: str = f"{root_title} - {audio_title}" if root_title else audio_title
-            resource_url: str | None = None
-            resource_format = "mp3"
-
-            # 优先选择转码后的 MP3 文件（ti_file_flag 为 href），否则回退到源文件
-            for item in audio_data["ti_items"]:
-                if item.get("ti_file_flag") not in ("href", "source") or item.get("ti_format") != "mp3":
-                    continue
-
-                resource_url = item.get("ti_storage") # 获取并构造资源的 URL
-                if resource_url:
-                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
-                else:
-                    resource_url = next((url for url in item.get("ti_storages") or [] if url), None)
-                if resource_url:
-                    resource_format = item.get("ti_format") or "mp3"
-                    break
-
-            if not resource_url:
-                return None
-
-            return title, resource_url, resource_format, []
-
         def get_resource_info(resource_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None:
-            title: str = f"{root_title} - {resource_data.get('title') or resource_data.get('id')}" if root_title else resource_data.get("title") or resource_data.get("id")
+            title_data = resource_data.get("global_title")
+            resource_title: str = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or resource_data.get("title") or resource_data.get("id")
+            title = f"{root_title} - {resource_title}" if root_title else resource_title
             resource_url: str | None = None
             resource_format = "pdf"
 
@@ -241,6 +216,33 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                     chapters = []
 
             return title, resource_url, resource_format, chapters
+
+        def get_audio_info(audio_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None: # 解析教材关联的音频资源（如英语教材听力）
+            # 音频资源的标题存放在 global_title 字典中（键为语言代码，如 zh-CN）
+            title_data = audio_data.get("global_title")
+            audio_title: str = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or audio_data.get("title") or audio_data.get("id")
+            title = f"{root_title} - {audio_title}" if root_title else audio_title
+            resource_url: str | None = None
+            resource_format = "mp3"
+
+            # 优先选择转码后的 MP3 文件（ti_file_flag 为 href），否则回退到源文件
+            for item in audio_data["ti_items"]:
+                if item.get("ti_file_flag") not in ("href", "source") or item.get("ti_format") != "mp3":
+                    continue
+
+                resource_url = item.get("ti_storage") # 获取并构造资源的 URL
+                if resource_url:
+                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
+                else:
+                    resource_url = next((url for url in item.get("ti_storages") or [] if url), None)
+                if resource_url:
+                    resource_format = item.get("ti_format") or "mp3"
+                    break
+
+            if not resource_url:
+                return None
+
+            return title, resource_url, resource_format, []
 
         if content_type == "thematic_course": # 专题课程
             resources_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/thematic_course/{content_id}/resources/list.json")

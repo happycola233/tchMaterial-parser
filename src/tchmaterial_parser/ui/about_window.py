@@ -11,7 +11,7 @@ from .. import __version__
 from ..platform_utils import resource_path
 from . import runtime, theme
 from .runtime import scaled
-from .widgets import center_window, make_card
+from .widgets import center_window
 
 PROJECT_URL = "https://github.com/happycola233/tchMaterial-parser"
 LICENSE_URL = "https://github.com/happycola233/tchMaterial-parser/blob/main/LICENSE"
@@ -86,7 +86,7 @@ def show_about_window() -> None: # 打开关于窗口
     ttk.Label(title_frame, text=f"版本 {__version__}", style="Caption.TLabel").pack(anchor="w", pady=(scaled(3), 0))
 
     # 作者、项目地址与许可证
-    info_card = make_card(frame, padding=(scaled(16), scaled(12)))
+    info_card = ttk.Frame(frame, style="Card.TFrame", padding=(scaled(16), scaled(12)))
     info_card.pack(fill="x", pady=(scaled(18), 0))
     info_card.columnconfigure(1, weight=1)
 
@@ -110,7 +110,7 @@ def show_about_window() -> None: # 打开关于窗口
     license_link.grid(row=2, column=1, sticky="nw", pady=(scaled(8), 0))
 
     # 第三方资源与许可证说明
-    license_card = make_card(frame, padding=(scaled(16), scaled(12)))
+    license_card = ttk.Frame(frame, style="Card.TFrame", padding=(scaled(16), scaled(12)))
     license_card.pack(fill="x", pady=(scaled(12), 0))
     ttk.Label(license_card, text="第三方许可证", style="AboutCardStrong.TLabel").pack(anchor="w")
     ttk.Label(
@@ -124,7 +124,7 @@ def show_about_window() -> None: # 打开关于窗口
     license_link.pack(anchor="w", pady=(scaled(8), 0))
 
     # 声明
-    notice_card = make_card(frame, padding=(scaled(16), scaled(12)))
+    notice_card = ttk.Frame(frame, style="Card.TFrame", padding=(scaled(16), scaled(12)))
     notice_card.pack(fill="x", pady=(scaled(12), 0))
     ttk.Label(notice_card, text="声明", style="AboutCardStrong.TLabel").pack(anchor="w")
     ttk.Label(
