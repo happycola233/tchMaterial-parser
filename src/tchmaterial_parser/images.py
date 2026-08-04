@@ -89,7 +89,6 @@ def render_system_emoji(symbol: str, icon_size: int) -> Image.Image | None: # å°
                 icon.alpha_composite(resized, ((icon_size - resized.width) // 2, (icon_size - resized.height) // 2))
                 return icon
             except Exception as e:
-                print_error(e)
                 continue
     return None
 

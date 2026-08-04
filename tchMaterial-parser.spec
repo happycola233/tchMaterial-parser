@@ -1,19 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
+from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
 
 is_mac = sys.platform.startswith('darwin')
 
-# sv-ttk 通过 Path(__file__).with_name() 加载主题文件，需把随包的 .tcl 与 .png 一并收集进来；
-# 下面 4 个图标文件是程序运行时读取的自有资源，目标目录保持为 assets/，与源码中的相对路径一致
-data_files = collect_data_files('sv_ttk') + [
-    ('assets/window_icon.png', 'assets'),
-    ('assets/last_quarter_moon_3d.png', 'assets'),
-    ('assets/sun_3d.png', 'assets'),
-    ('assets/crescent_moon_3d.png', 'assets'),
-    ('assets/information_3d.png', 'assets'),
+# sv-ttk 通过 Path(__file__).with_name() 加载主题文件，需把随包的 .tcl 与 .png 一并收集进来；图标文件是程序运行时读取的自有资源
+runtime_assets = [
+    (str(path), "tchmaterial_parser/assets")
+    for path in Path("src/tchmaterial_parser/assets").glob("*.png")
 ]
+data_files = collect_data_files("sv_ttk") + runtime_assets
 
 a = Analysis(
     # 入口位于包外：PyInstaller 会把入口脚本当作 __main__ 分析，包内脚本的相对导入在此情形下不成立
