@@ -15,7 +15,6 @@ dependencies = [
     "pillow>=10,<13",
     "psutil>=5.9,<8",
     "pypdf>=5,<7",
-    "pyperclip>=1.8,<2",
     "requests>=2.31,<3",
     "sv-ttk>=2.6,<3",
     "pywin32>=306; sys_platform == 'win32'",

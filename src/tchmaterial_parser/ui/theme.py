@@ -126,7 +126,7 @@ def apply_widget_theme(widget: tk.Widget) -> None: # 为单个 tk 原生控件�
         widget.configure(
             background=current_colors["page"], foreground=current_colors["fg"],
             activebackground=current_colors["selbg"], activeforeground=current_colors["selfg"],
-            activeborderwidth=0, borderwidth=0, relief="flat",
+            relief="flat",
         )
     elif isinstance(widget, tk.Text):
         widget.configure(

@@ -5,7 +5,6 @@
 import os, traceback
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import pyperclip
 
 from .runtime import thread_it, ui_call
 from .. import config
@@ -37,7 +36,8 @@ def parse_and_copy() -> None: # 解析并复制链接
         messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls))
 
     if resource_urls:
-        pyperclip.copy("\n".join(resource_urls)) # 将链接复制到剪贴板
+        url_text.clipboard_clear()
+        url_text.clipboard_append("\n".join(resource_urls)) # 将链接复制到剪贴板
         messagebox.showinfo(
             "提示",
             f'资源链接已复制到剪贴板。\n注意：链接可能无法直接下载，需要加上以下 HTTP 标头才能下载{"（以下标头含有隐私信息，请勿分享给别人）" if config.access_token else ""}：\n\nAuthorization: Bearer {config.access_token or "0"}\nX-ND-AUTH: MAC id="{config.access_token or "0"}",nonce="0",mac="0"'

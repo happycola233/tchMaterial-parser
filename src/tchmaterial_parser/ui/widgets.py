@@ -10,7 +10,7 @@ from .theme import register_themed_widget
 from ..platform_utils import os_name
 
 def bind_context_menu(parent: tk.Widget, type: Literal["normal", "noundo", "readonly"] = "normal") -> None: # 创建右键菜单
-    context_menu = tk.Menu(parent, tearoff=0, font="AppBodyFont")
+    context_menu = tk.Menu(parent, tearoff=False, font="AppBodyFont")
     register_themed_widget(context_menu)
     if type == "normal":
         context_menu.add_command(label="撤销 (U)", underline=4, accelerator="Ctrl+Z", command=lambda: parent.event_generate("<<Undo>>"))
@@ -26,14 +26,17 @@ def bind_context_menu(parent: tk.Widget, type: Literal["normal", "noundo", "read
     def show_context_menu(event: tk.Event) -> None:
         context_menu.post(event.x_root, event.y_root)
         context_menu.bind("<FocusOut>", lambda e: context_menu.unpost()) # 绑定失焦事件，失焦时自动关闭菜单
+        context_menu.bind("<Escape>", lambda e: context_menu.unpost(), add="+") # 绑定 Esc 键，按下时关闭菜单
+        runtime.root.bind("<Escape>", lambda e: context_menu.unpost(), add="+") # 绑定 Esc 键，按下时关闭菜单
         runtime.root.bind("<Button-1>", lambda e: context_menu.unpost(), add="+") # 绑定左键点击事件，点击其他地方也关闭菜单
 
-    # 绑定右键菜单到文本框（3 代表鼠标的右键按钮）
-    parent.bind("<Button-3>", show_context_menu)
+    # 绑定右键菜单到文本框
+    parent.bind("<Button-3>", show_context_menu) # 鼠标右键
     parent.bind("<Menu>", show_context_menu) # BUG: 按下菜单键不起作用
+    parent.bind("<Shift-F10>", show_context_menu)
     if os_name == "Darwin":
-        parent.bind("<Control-Button-1>", show_context_menu)
-        parent.bind("<Button-2>", show_context_menu)
+        parent.bind("<Control-Button-1>", show_context_menu) # Command + 鼠标左键
+        parent.bind("<Button-2>", show_context_menu) # 鼠标中键
 
 def auto_hide_scrollbar(scrollbar: ttk.Scrollbar, first: str, last: str) -> None: # 根据内容自动显示或隐藏滚动条
     scrollbar.set(first, last)
