@@ -36,12 +36,20 @@ def parse_and_copy() -> None: # 解析并复制链接
         messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls))
 
     if resource_urls:
-        url_text.clipboard_clear()
-        url_text.clipboard_append("\n".join(resource_urls)) # 将链接复制到剪贴板
-        messagebox.showinfo(
-            "提示",
-            f'资源链接已复制到剪贴板。\n注意：链接可能无法直接下载，需要加上以下 HTTP 标头才能下载{"（以下标头含有隐私信息，请勿分享给别人）" if config.access_token else ""}：\n\nAuthorization: Bearer {config.access_token or "0"}\nX-ND-AUTH: MAC id="{config.access_token or "0"}",nonce="0",mac="0"'
-        )
+        try:
+            resource_urls_str = "\n".join(resource_urls)
+            url_text.clipboard_clear()
+            url_text.clipboard_append(resource_urls_str) # 将链接复制到剪贴板
+            if url_text.clipboard_get() == resource_urls_str: # 检查剪贴板内容是否正确
+                messagebox.showinfo(
+                    "提示",
+                    f'资源链接已复制到剪贴板。\n注意：链接可能无法直接下载，需要加上以下 HTTP 标头才能下载{"（以下标头含有隐私信息，请勿分享给别人）" if config.access_token else ""}：\n\nAuthorization: Bearer {config.access_token or "0"}\nX-ND-AUTH: MAC id="{config.access_token or "0"}",nonce="0",mac="0"'
+                )
+            else:
+                messagebox.showerror("错误", "无法将链接复制到剪贴板，请手动复制。")
+        except Exception as e:
+            print_error(e)
+            messagebox.showerror("错误", "无法将链接复制到剪贴板，请手动复制。")
 
 def download() -> None: # 下载资源文件
     global download_states
