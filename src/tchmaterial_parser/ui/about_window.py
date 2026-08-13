@@ -36,6 +36,7 @@ def show_about_window() -> None: # 打开关于窗口
     about_window.title("关于")
     about_window.resizable(False, False)
     about_window.focus()
+    about_window.grab_set()
     about_window.transient(runtime.root)
     about_window.bind("<Escape>", lambda _event: about_window.destroy())
 
@@ -65,7 +66,7 @@ def show_about_window() -> None: # 打开关于窗口
         foreground="#3973e6" if theme.current_theme == "light" else "#75a7ff",
     )
 
-    frame = ttk.Frame(about_window, padding=scaled(24))
+    frame = ttk.Frame(about_window, padding=(scaled(24), scaled(18)))
     frame.pack(fill="both", expand=True)
 
     # 程序图标与名称
@@ -93,9 +94,12 @@ def show_about_window() -> None: # 打开关于窗口
     ttk.Label(info_card, text="作者", style="AboutCardMuted.TLabel").grid(
         row=0, column=0, sticky="nw", padx=(0, scaled(16)),
     )
-    ttk.Label(info_card, text="肥宅水水呀、晨叶梦春 及其他贡献者", style="AboutCard.TLabel").grid(
-        row=0, column=1, sticky="nw",
-    )
+    author_frame = ttk.Frame(info_card)
+    make_link(author_frame, "肥宅水水呀", "https://github.com/happycola233", about_window).pack(side="left")
+    ttk.Label(author_frame, text="、", style="AboutCard.TLabel").pack(side="left")
+    make_link(author_frame, "晨叶梦春", "https://github.com/wuziqian211", about_window).pack(side="left")
+    ttk.Label(author_frame, text="及其他贡献者", style="AboutCard.TLabel").pack(side="left")
+    author_frame.grid(row=0, column=1, sticky="nw")
 
     ttk.Label(info_card, text="仓库", style="AboutCardMuted.TLabel").grid(
         row=1, column=0, sticky="nw", padx=(0, scaled(16)), pady=(scaled(8), 0),

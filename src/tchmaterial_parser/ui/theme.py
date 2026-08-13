@@ -30,7 +30,7 @@ SWITCH_STYLE = "Switch.TCheckbutton"
 # 本程序使用的命名字体，格式为 字体名称: (基准字号（像素）, 是否加粗, 是否添加下划线)
 APP_FONTS = {
     "AppCaptionFont": (12, False, False), "AppBodyFont": (14, False, False), "AppStrongFont": (14, True, False),
-    "AppTitleFont": (20, True, False), "AppLinkFont": (12, False, True)
+    "AppTitleFont": (20, True, False), "AppLinkFont": (14, False, True)
 }
 # sv-ttk 内置的命名字体，需要一并改为中文字体（其默认字体不含中文字形），基准字号与 sv-ttk 原始取值保持一致
 SV_FONTS = {
@@ -68,7 +68,7 @@ def setup_fonts() -> None: # 创建（或更新）所有命名字体，使其使
             "-family", ui_font_family,
             "-size", -scaled(size),
             "-weight", "bold" if bold else "normal",
-            "-underline", 1 if underline else 0
+            "-underline", 1 if underline else 0,
         )
         runtime.root.tk.call("font", "configure" if name in existing_fonts else "create", name, *options)
 
@@ -83,14 +83,14 @@ def detect_system_theme() -> Literal["light", "dark"]: # 获取系统当前使�
         elif os_name == "Darwin": # 在 macOS 上，读取全局偏好设置（仅深色模式下存在 AppleInterfaceStyle 项，其值为 Dark）
             result = subprocess.run(
                 ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                capture_output=True, text=True, timeout=2
+                capture_output=True, text=True, timeout=2,
             )
             return "dark" if result.stdout.strip() == "Dark" else "light"
         elif os_name == "Linux": # 在 Linux 上，读取 GNOME 的配色方案设置（其值形如 "prefer-dark"）
             try:
                 result = subprocess.run(
                     ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
-                    capture_output=True, text=True, timeout=2
+                    capture_output=True, text=True, timeout=2,
                 )
             except FileNotFoundError: # 非 GNOME 桌面环境多半没有 gsettings，此时无从判断，按浅色处理
                 return "light"

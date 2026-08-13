@@ -129,7 +129,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
 
     def on_tree_view_change(first: str, last: str) -> None:
         auto_hide_scrollbar(treeview_scrollbar, first, last)
-        runtime.root.after_idle(load_visible_tree_icons)
+        ui_call(load_visible_tree_icons)
 
     def refresh_resource_tree() -> None: # 根据搜索词重建树视图
         nonlocal tree_content_width
@@ -147,7 +147,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
         result_count = count_resource_items(visible_items)
         search_status_label.config(text=f"{result_count} 项" if result_count else "无匹配资源")
         clear_search_btn.state(["!disabled"] if query else ["disabled"])
-        runtime.root.after_idle(load_visible_tree_icons)
+        ui_call(load_visible_tree_icons)
 
     def on_tree_select(event: tk.Event) -> None: # 处理树视图选择事件
         selection = treeview.selection()
@@ -258,10 +258,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
         hide_tree_tooltip()
         hovered_tree_item = item_id
         if item_id:
-            tooltip_after_id = runtime.root.after(
-                450,
-                lambda: show_tree_tooltip(item_id, event.x_root, event.y_root),
-            )
+            tooltip_after_id = runtime.root.after(450, lambda: show_tree_tooltip(item_id, event.x_root, event.y_root))
 
     def leave_tree() -> None:
         nonlocal hovered_tree_item
@@ -301,7 +298,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
     search_var.trace_add("write", schedule_search)
     treeview.configure(yscrollcommand=on_tree_view_change)
     treeview.bind("<<TreeviewSelect>>", on_tree_select)
-    treeview.bind("<<TreeviewOpen>>", lambda _event: runtime.root.after_idle(load_visible_tree_icons))
+    treeview.bind("<<TreeviewOpen>>", lambda _event: ui_call(load_visible_tree_icons))
     treeview.bind("<Configure>", lambda event: resize_tree_column(event.width))
     treeview.bind("<Motion>", on_tree_motion)
     treeview.bind("<Leave>", lambda _event: leave_tree())

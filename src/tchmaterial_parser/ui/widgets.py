@@ -11,17 +11,17 @@ from ..platform_utils import os_name
 
 root_handlers_bound: dict[tk.Menu, bool] = {} # 用于记录每个右键菜单是否已绑定根窗口事件，避免重复绑定
 
-def bind_context_menu(parent: tk.Widget, type: Literal["normal", "noundo", "readonly"] = "normal") -> None: # 创建右键菜单
+def bind_context_menu(parent: tk.Widget, menu_type: Literal["normal", "noundo", "readonly"] = "normal") -> None: # 创建右键菜单
     context_menu = tk.Menu(parent, tearoff=False, font="AppBodyFont")
     register_themed_widget(context_menu)
     root_handlers_bound[context_menu] = False # 初始化为未绑定根窗口事件
-    if type == "normal":
+    if menu_type == "normal":
         context_menu.add_command(label="撤销 (U)", underline=4, accelerator="Ctrl+Z", command=lambda: parent.event_generate("<<Undo>>"))
         context_menu.add_separator()
-    if type != "readonly":
+    if menu_type != "readonly":
         context_menu.add_command(label="剪切 (T)", underline=4, accelerator="Ctrl+X", command=lambda: parent.event_generate("<<Cut>>"))
     context_menu.add_command(label="复制 (C)", underline=4, accelerator="Ctrl+C", command=lambda: parent.event_generate("<<Copy>>"))
-    if type != "readonly":
+    if menu_type != "readonly":
         context_menu.add_command(label="粘贴 (P)", underline=4, accelerator="Ctrl+V", command=lambda: parent.event_generate("<<Paste>>"))
         context_menu.add_separator()
     context_menu.add_command(label="全选 (A)", underline=4, accelerator="Ctrl+A", command=lambda: parent.event_generate("<<SelectAll>>"))
@@ -39,7 +39,7 @@ def bind_context_menu(parent: tk.Widget, type: Literal["normal", "noundo", "read
                 else:
                     raise Exception("无法获取插入点位置")
             except Exception: # 再尝试使用鼠标指针位置（如果有）
-                px, py = parent.winfo_pointerx(), parent.winfo_pointery()
+                px, py = parent.winfo_pointerxy()
                 if px >= 0 and py >= 0:
                     x_root, y_root = px, py
                 else: # 最后回退到控件中心

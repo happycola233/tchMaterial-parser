@@ -200,13 +200,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
             description_icon_label = ttk.Label(description_card, image=photo, style="Description.TLabel")
         else: # Pillow 无法读取系统 Emoji 字体时，退回改版前由 Tk 直接显示字符的方式
             description_icon_label = ttk.Label(description_card, text=symbol, style="Description.TLabel")
-        description_icon_label.grid(
-            row=row,
-            column=0,
-            sticky="n",
-            padx=(0, description_icon_gap),
-            pady=row_padding,
-        )
+        description_icon_label.grid(row=row, column=0, sticky="n", padx=(0, description_icon_gap), pady=row_padding)
         description_label = ttk.Label(
             description_card,
             text=text,
@@ -235,7 +229,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     paned.add(treeview_pane)
     paned.add(text_pane)
     paned.update_idletasks()
-    root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%（不能使用 ui_call）
+    root.after(0, lambda: paned.sashpos(0, int(paned.winfo_width() * 0.4))) # 设置分割条的位置为窗口宽度的 40%（不能使用 ui_call、root.after_idle）
 
     url_label = ttk.Label(text_pane, text="资源页面网址", style="Heading.TLabel") # 添加 URL 标签
     url_label.grid(row=0, column=0, sticky="w", pady=(0, scaled(6)))

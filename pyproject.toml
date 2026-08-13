@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tchMaterial-parser"
-version = "4.0"
+version = "4.1"
 description = "国家中小学智慧教育平台 资源下载工具"
 readme = "README.md"
 requires-python = ">=3.10"

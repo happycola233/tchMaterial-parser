@@ -19,12 +19,12 @@ def thread_it(func: callable, *args: tuple, **kwargs: dict) -> None: # 打包函
     t.daemon = True
     t.start()
 
-def ui_call(func: callable, *args: tuple, **kwargs: dict) -> None: # 在主线程执行 Tkinter UI 更新
+def ui_call(func: callable, *args: tuple, **kwargs: dict) -> str | None: # 在主线程执行 Tkinter UI 更新
     if app_closing:
-        return
+        return None
 
     try:
-        root.after(0, lambda: not app_closing and func(*args, **kwargs))
+        return root.after_idle(lambda: not app_closing and func(*args, **kwargs))
     except Exception:
-        # 主窗口销毁后，root.after 会抛错，直接忽略即可
-        pass
+        # 主窗口销毁后，root.after_idle 会抛错，直接忽略即可
+        return None
