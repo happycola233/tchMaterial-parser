@@ -60,7 +60,7 @@ def download() -> None: # 下载资源文件
     resource_urls: set[str] = set()
     failed_urls: set[str] = set()
 
-    if not config.access_token.isascii(): # 判断 Access Token 中是否包含非 ASCII 字符
+    if config.access_token and not config.access_token.isascii(): # 判断 Access Token 中是否包含非 ASCII 字符
         messagebox.showwarning("警告", "Access Token 不正确（包含非 ASCII 字符），请点击“设置 Token”按钮重新填写。")
         download_btn.config(state="normal") # 恢复下载按钮为启用状态
         return
