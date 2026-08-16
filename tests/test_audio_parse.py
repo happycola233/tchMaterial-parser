@@ -25,6 +25,12 @@ class FakeSession:
 DETAILS = {
     "id": "book-1",
     "title": "英语七年级上册",
+    "tag_list": [
+        {
+            "tag_dimension_id": "zxxbb",
+            "tag_name": "人教版",
+        },
+    ],
     "ti_items": [
         {
             "ti_is_source_file": True,
@@ -69,7 +75,7 @@ class AudioParseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.addCleanup(setattr, api, "session", api.session)
 
-    def parse_book(self) -> list[tuple[str, str, str, list[dict]]] | None:
+    def parse_book(self) -> list[api.ResourceInfo] | None:
         api.session = FakeSession(DETAILS, AUDIOS)
         url = "https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&contentId=book-1&catalogType=tchMaterial&subCatalog=tchMaterial"
         return api.parse(url, False)
@@ -79,9 +85,11 @@ class AudioParseTest(unittest.TestCase):
         self.assertIsNotNone(results)
         self.assertEqual(len(results), 3)
         self.assertEqual(results[0][2], "pdf")
+        self.assertEqual(results[0].edition, "人教版")
         self.assertEqual(results[1][1], "https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/assets/audio-1.t/1.mp3")
         self.assertEqual(results[1][2], "mp3")
         self.assertEqual(results[1][0], "英语七年级上册 - 1 Starter Section 2 Activity 2")
+        self.assertEqual(results[1].edition, "人教版")
         self.assertEqual(results[2][0], "英语七年级上册 - 2 Starter Section 3 Activity 1")
 
     def test_textbook_without_audio_returns_only_pdf(self) -> None:
