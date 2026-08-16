@@ -2,9 +2,13 @@
 # 下载面板：解析并复制直链、下载资源文件与进度反馈
 # 本模块持有与下载相关的几个控件句柄，因此这些控件的读写不必跨模块
 
-import os, traceback
+import os, re, traceback
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from xml.etree import ElementTree
+
+from requests import RequestException
 
 from .runtime import thread_it, ui_call
 from .. import config
@@ -14,6 +18,96 @@ from ..network import headers, session
 from ..platform_utils import print_error
 
 download_states: list[dict] = [] # 初始化下载状态
+PRIVATE_DOWNLOAD_HOSTS = tuple(f"r{index}-ndr-private.ykt.cbern.com.cn" for index in range(1, 4))
+
+def redact_access_token(text: str) -> str:
+    """隐藏 URL 查询参数里的 Token，防止网络异常把凭据带入日志或弹窗。"""
+    return re.sub(r"([?&]accessToken=)[^&\s'\"]+", r"\1<已隐藏>", text, flags=re.IGNORECASE)
+
+def authenticated_download_url(url: str) -> str:
+    """仅在真正发起请求时为私有资源附加 Token，避免把凭据写入状态或错误信息。"""
+    parts = urlsplit(url)
+    hostname = parts.hostname or ""
+    if not config.access_token or not hostname.endswith("-ndr-private.ykt.cbern.com.cn"):
+        return url
+
+    query = [(name, value) for name, value in parse_qsl(parts.query, keep_blank_values=True) if name != "accessToken"]
+    query.append(("accessToken", config.access_token))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+def download_mirror_urls(url: str) -> list[str]:
+    """按原地址优先的顺序生成私有 CDN 镜像，普通下载地址保持不变。"""
+    parts = urlsplit(url)
+    hostname = parts.hostname or ""
+    if hostname not in PRIVATE_DOWNLOAD_HOSTS:
+        return [url]
+
+    ordered_hosts = [hostname, *(host for host in PRIVATE_DOWNLOAD_HOSTS if host != hostname)]
+    return [urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment)) for host in ordered_hosts]
+
+def request_download(url: str):
+    """请求资源并在镜像出错时自动切换，返回最终响应和已尝试的无凭据地址。"""
+    attempted_urls: list[str] = []
+    last_response = None
+    last_exception: RequestException | None = None
+
+    for candidate_url in download_mirror_urls(url):
+        attempted_urls.append(candidate_url)
+        try:
+            response = session.get(authenticated_download_url(candidate_url), headers=headers, stream=True)
+        except RequestException as e:
+            last_exception = e
+            continue
+
+        if response.ok:
+            if last_response is not None:
+                last_response.close()
+            return response, attempted_urls
+
+        if last_response is not None:
+            last_response.close()
+        last_response = response
+
+        # 认证失败通常与镜像无关，立即返回以免重复请求。
+        if response.status_code in (401, 403):
+            break
+
+    if last_response is not None:
+        return last_response, attempted_urls
+    if last_exception is not None:
+        # requests 的异常文字通常包含完整请求 URL，此处重新包装以清除查询参数中的 Token。
+        raise RuntimeError(redact_access_token(str(last_exception))) from None
+    raise RuntimeError("没有可用的下载地址")
+
+def storage_error_code(response) -> str | None:
+    """读取对象存储返回的 XML 错误码；非 XML 响应保持原有通用提示。"""
+    try:
+        root = ElementTree.fromstring(response.content)
+        return root.findtext("Code")
+    except (AttributeError, ElementTree.ParseError, TypeError):
+        return None
+
+def download_failure_reason(response, attempted_urls: list[str]) -> str:
+    status_code = response.status_code
+    error_code = storage_error_code(response)
+    reason = f"服务器返回 HTTP 状态码 {status_code}"
+    if error_code:
+        reason += f"（{error_code}）"
+
+    if status_code in (401, 403):
+        if config.access_token:
+            reason += "，Access Token 可能已过期或无效，请重新设置"
+        else:
+            reason += "，该资源需要有效的 Access Token，请先设置"
+    elif status_code == 400 and error_code == "InvalidArgument":
+        if config.access_token:
+            reason += "，私有资源鉴权失败，Access Token 可能已过期或无效，请重新设置"
+        else:
+            reason += "，该私有资源需要有效的 Access Token，请先设置"
+
+    if len(attempted_urls) > 1:
+        reason += f"，已尝试 {len(attempted_urls)} 个下载镜像"
+    return reason
 
 def bind_widgets(text: tk.Text, bookmark: tk.BooleanVar, button: ttk.Button, progress_bar: ttk.Progressbar, label: ttk.Label) -> None: # 由 app.py 在创建控件后写入
     global url_text, bookmark_var, download_btn, download_progress_bar, progress_label
@@ -115,12 +209,13 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
     download_states.append(current_state)
     temp_path = f"{save_path}.tmp"
 
+    response = None
     try:
-        response = session.get(url, headers=headers, stream=True)
+        response, attempted_urls = request_download(url)
 
         if not response.ok: # 服务器返回表示错误的 HTTP 状态码
             current_state["finished"] = True
-            current_state["failed_reason"] = f"服务器返回 HTTP 状态码 {response.status_code}" + ("，Access Token 可能已过期或无效，请重新设置" if response.status_code in (401, 403) else "")
+            current_state["failed_reason"] = download_failure_reason(response, attempted_urls)
         else:
             current_state["total_size"] = int(response.headers.get("Content-Length", 0))
 
@@ -161,11 +256,14 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
         print_error(e)
         current_state["downloaded_size"], current_state["total_size"] = 0, 0
         current_state["finished"] = True
-        current_state["failed_reason"] = traceback.format_exc().rstrip()
+        current_state["failed_reason"] = redact_access_token(traceback.format_exc().rstrip())
         try:
             os.remove(temp_path)
         except Exception:
             pass
+    finally:
+        if response is not None:
+            response.close()
 
     if all(state["finished"] for state in download_states): # 所有文件下载完成
         ui_call(download_progress_bar.config, value=0) # 重置进度条
