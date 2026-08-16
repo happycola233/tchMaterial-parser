@@ -4,6 +4,7 @@
 
 import os, re, traceback
 import tkinter as tk
+from collections import Counter
 from tkinter import ttk, messagebox, filedialog
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from xml.etree import ElementTree
@@ -12,7 +13,7 @@ from requests import RequestException
 
 from .runtime import thread_it, ui_call
 from .. import config
-from ..api import parse
+from ..api import ResourceInfo, parse
 from ..bookmarks import add_bookmarks
 from ..network import headers, session
 from ..platform_utils import print_error
@@ -109,6 +110,45 @@ def download_failure_reason(response, attempted_urls: list[str]) -> str:
         reason += f"，已尝试 {len(attempted_urls)} 个下载镜像"
     return reason
 
+def download_filename(resource: ResourceInfo) -> str:
+    return f"{resource.title or 'download'}.{resource.file_format}"
+
+def filename_key(filename: str) -> str:
+    """以跨平台保守方式比较文件名，提前避开 Windows/macOS 上的大小写冲突。"""
+    return os.path.normcase(filename).casefold()
+
+def allocate_download_paths(resources: list[ResourceInfo], directory: str) -> list[str]:
+    """在线程启动前为批量任务分配唯一目标路径，防止多个线程共用同一个 .tmp 文件。"""
+    base_filenames = [download_filename(resource) for resource in resources]
+    base_counts = Counter(filename_key(filename) for filename in base_filenames)
+
+    edition_filenames: list[str] = []
+    for resource, filename in zip(resources, base_filenames):
+        # 例如人教版与北师大版的“普通高中教科书·英语必修 第三册”同名时，优先使用易读的版别前缀区分。
+        if base_counts[filename_key(filename)] > 1 and resource.edition:
+            filename = f"[{resource.edition}] {filename}"
+        edition_filenames.append(filename)
+
+    reserved_paths: set[str] = set()
+    allocated_paths: list[str] = []
+    for filename in edition_filenames:
+        candidate = os.path.join(directory, filename)
+        stem, extension = os.path.splitext(candidate)
+        sequence = 2
+
+        # 同时检查最终文件和可辨识的“最终文件.tmp”；后者可能属于另一个仍在运行的程序实例。
+        while (
+            filename_key(candidate) in reserved_paths
+            or os.path.exists(candidate)
+            or os.path.exists(f"{candidate}.tmp")
+        ):
+            candidate = f"{stem} ({sequence}){extension}"
+            sequence += 1
+
+        reserved_paths.add(filename_key(candidate))
+        allocated_paths.append(candidate)
+    return allocated_paths
+
 def bind_widgets(text: tk.Text, bookmark: tk.BooleanVar, button: ttk.Button, progress_bar: ttk.Progressbar, label: ttk.Label) -> None: # 由 app.py 在创建控件后写入
     global url_text, bookmark_var, download_btn, download_progress_bar, progress_label
     url_text, bookmark_var, download_btn, download_progress_bar, progress_label = text, bookmark, button, progress_bar, label
@@ -124,7 +164,7 @@ def parse_and_copy() -> None: # 解析并复制链接
             failed_urls.add(url) # 添加到失败链接
             continue
         for resource in resources_info:
-            resource_urls.add(resource[1])
+            resource_urls.add(resource.url)
 
     if failed_urls:
         messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls))
@@ -150,7 +190,7 @@ def download() -> None: # 下载资源文件
     download_btn.config(state="disabled") # 设置下载按钮为禁用状态
     download_states = [] # 初始化下载状态
     urls = {line.strip() for line in url_text.get("1.0", "end").splitlines() if line.strip()} # 获取所有非空行并去重
-    resources_info_list: list[tuple[str, str, str, list[dict]]] = []
+    resources_info_list: list[ResourceInfo] = []
     resource_urls: set[str] = set()
     failed_urls: set[str] = set()
 
@@ -165,7 +205,7 @@ def download() -> None: # 下载资源文件
             failed_urls.add(url)
             continue
         for resource in resources_info:
-            resource_url = resource[1]
+            resource_url = resource.url
             if resource_url in resource_urls: # 直接使用 resources_info_list 会报错（list 不可哈希）
                 continue
             resources_info_list.append(resource)
@@ -181,22 +221,25 @@ def download() -> None: # 下载资源文件
     else:
         dir_path = None
 
-    for resource in resources_info_list:
-        title, resource_url, resource_format, chapters = resource
-        default_filename = title or "download"
-        if dir_path:
-            save_path = os.path.join(dir_path, f"{default_filename}.{resource_format}") # 构造完整路径
-        else:
+    if dir_path:
+        # 路径必须在任何线程启动前统一预留，否则同名资源仍可能同时打开同一个 .tmp 文件。
+        download_targets = list(zip(resources_info_list, allocate_download_paths(resources_info_list, dir_path)))
+    else:
+        download_targets: list[tuple[ResourceInfo, str]] = []
+        for resource in resources_info_list:
             save_path = filedialog.asksaveasfilename( # 选择保存路径
-                defaultextension=f".{resource_format}",
-                filetypes=[(f"{resource_format.upper()} 文件", f"*.{resource_format}"), ("所有文件", "*.*")],
-                initialfile=default_filename,
+                defaultextension=f".{resource.file_format}",
+                filetypes=[(f"{resource.file_format.upper()} 文件", f"*.{resource.file_format}"), ("所有文件", "*.*")],
+                initialfile=resource.title or "download",
             )
             if not save_path: # 用户取消了文件保存操作
                 download_btn.config(state="normal") # 恢复下载按钮为启用状态
                 return
             save_path = os.path.normpath(save_path)
-        thread_it(download_file, resource_url, save_path, chapters) # 开始下载（多线程，防止窗口卡死）
+            download_targets.append((resource, save_path))
+
+    for resource, save_path in download_targets:
+        thread_it(download_file, resource.url, save_path, resource.chapters) # 开始下载（多线程，防止窗口卡死）
 
     if failed_urls:
         messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls)) # 显示警告对话框

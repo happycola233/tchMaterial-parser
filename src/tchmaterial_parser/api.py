@@ -2,10 +2,25 @@
 # 解析单个资源页面，获取资源标题、下载直链、文件格式与章节目录
 
 import re
+from typing import NamedTuple
 from urllib.parse import urlparse, parse_qs
 
 from .network import headers, session
 from .platform_utils import print_error
+
+class ResourceInfo(NamedTuple):
+    title: str
+    url: str
+    file_format: str
+    chapters: list[dict]
+    edition: str | None = None
+
+def get_edition_name(resource_data: dict) -> str | None:
+    """读取资源分类中的教材版别，例如“人教版”“北师大版”。"""
+    for tag in resource_data.get("tag_list") or []:
+        if tag.get("tag_dimension_id") == "zxxbb" and tag.get("tag_name"):
+            return tag["tag_name"]
+    return None
 
 def combine_resource_title(root_title: str | None, resource_title: str) -> str:
     """组合专题标题与实际资源标题，并避免平台重复标题造成超长文件名。"""
@@ -20,9 +35,9 @@ def combine_resource_title(root_title: str | None, resource_title: str) -> str:
         return resource_title
     return f"{root_title} - {resource_title}"
 
-def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] | None: # 解析资源，获取资源下载链接
+def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资源，获取资源下载链接
     try:
-        resources_info: list[tuple[str, str, str, list[dict]]] = []
+        resources_info: list[ResourceInfo] = []
 
         # 1. 提取 URL 中的 contentId 与 contentType
         content_id: str | None = None
@@ -112,9 +127,10 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
             response = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/resources/details/{content_id}.json")
 
         data: dict = response.json()
+        root_edition = get_edition_name(data)
 
         # 3. 获取资源标题、下载链接及章节目录
-        def get_resource_info(resource_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None:
+        def get_resource_info(resource_data: dict, root_title: str | None = None, edition: str | None = None) -> ResourceInfo | None:
             title_data = resource_data.get("global_title")
             resource_title: str = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or resource_data.get("title") or resource_data.get("id")
             title = combine_resource_title(root_title, resource_title)
@@ -228,9 +244,15 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                     print_error(e)
                     chapters = []
 
-            return title, resource_url, resource_format, chapters
+            return ResourceInfo(
+                title,
+                resource_url,
+                resource_format,
+                chapters,
+                edition or get_edition_name(resource_data),
+            )
 
-        def get_audio_info(audio_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None: # 解析教材关联的音频资源（如英语教材听力）
+        def get_audio_info(audio_data: dict, root_title: str | None = None, edition: str | None = None) -> ResourceInfo | None: # 解析教材关联的音频资源（如英语教材听力）
             # 音频资源的标题存放在 global_title 字典中（键为语言代码，如 zh-CN）
             title_data = audio_data.get("global_title")
             audio_title: str = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or audio_data.get("title") or audio_data.get("id")
@@ -255,13 +277,19 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
             if not resource_url:
                 return None
 
-            return title, resource_url, resource_format, []
+            return ResourceInfo(
+                title,
+                resource_url,
+                resource_format,
+                [],
+                edition or get_edition_name(audio_data),
+            )
 
         if content_type == "thematic_course": # 专题课程
             resources_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/thematic_course/{content_id}/resources/list.json")
             resources_data: list[dict] = resources_resp.json()
             for resource in resources_data:
-                resource_info = get_resource_info(resource, data["title"])
+                resource_info = get_resource_info(resource, data["title"], root_edition)
                 if resource_info:
                     resources_info.append(resource_info)
         elif data.get("relations"): # 课程包等多资源页面（含导学案、课件、PPT 等）
@@ -269,7 +297,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                 if not isinstance(resources, list):
                     continue
                 for resource in resources:
-                    resource_info = get_resource_info(resource, data.get("title"))
+                    resource_info = get_resource_info(resource, data.get("title"), root_edition)
                     if resource_info:
                         resources_info.append(resource_info)
         else: # 其他类型资源
@@ -282,7 +310,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
                     audios_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/{content_id}/relation_audios.json")
                     audios_data: list[dict] = audios_resp.json()
                     for audio in audios_data:
-                        audio_info = get_audio_info(audio, data.get("title"))
+                        audio_info = get_audio_info(audio, data.get("title"), root_edition)
                         if audio_info:
                             resources_info.append(audio_info)
                 except Exception: # 音频资源不是必需的，获取失败时直接跳过
