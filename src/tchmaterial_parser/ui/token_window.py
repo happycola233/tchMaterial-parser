@@ -112,6 +112,11 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
             background=theme.current_colors["surface"],
             foreground=theme.current_colors["muted"],
         )
+        style.configure(
+            "TokenHelpWarning.TLabel",
+            font="AppCaptionFont",
+            foreground="#9a5b00" if theme.current_theme == "light" else "#f2b95f",
+        )
 
         help_frame = ttk.Frame(help_win, padding=(scaled(24), scaled(20)))
         help_frame.pack(fill="both", expand=True)
@@ -164,11 +169,22 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
             "打开浏览器控制台",
             "按 F12 或 Ctrl + Shift + I，也可以右键页面并选择“检查”；然后切换到“控制台（Console）”。",
         )
-        add_step(
+        paste_step = add_step(
             "3",
             "复制并运行脚本",
             "点击“复制代码”，粘贴到浏览器控制台，然后按 Enter 运行。只需复制下面代码框中的内容。",
         )
+        ttk.Label(
+            paste_step,
+            text=(
+                "控制台阻止粘贴？这是浏览器的安全机制。本脚本只读取当前页面的本地登录数据并输出 Token；"
+                "确认后，必须用键盘手动输入黄色提示要求的短语（如“allow pasting”或“允许粘贴”，"
+                "以实际提示为准），按 Enter 后再重新粘贴。"
+            ),
+            style="TokenHelpWarning.TLabel",
+            justify="left",
+            wraplength=scaled(650),
+        ).pack(anchor="w", pady=(scaled(6), 0))
 
         # 代码与说明分离，用户可以清楚看到唯一需要复制到控制台的内容。
         code_card = ttk.Frame(help_frame, style="Card.TFrame", padding=(scaled(14), scaled(12)))
@@ -196,7 +212,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
                 help_win.clipboard_clear()
                 help_win.clipboard_append(ACCESS_TOKEN_SCRIPT)
                 copy_button.configure(text="✓ 已复制")
-                copy_status.configure(text="已复制，可直接粘贴到浏览器控制台")
+                copy_status.configure(text="已复制；若粘贴被拦截，请按上方第 3 步操作")
             except tk.TclError as error:
                 messagebox.showerror("复制失败", f"无法写入剪贴板：\n{error}", parent=help_win)
 
