@@ -7,6 +7,19 @@ from urllib.parse import urlparse, parse_qs
 from .network import headers, session
 from .platform_utils import print_error
 
+def combine_resource_title(root_title: str | None, resource_title: str) -> str:
+    """组合专题标题与实际资源标题，并避免平台重复标题造成超长文件名。"""
+    if not root_title:
+        return resource_title
+
+    # 例如“体育与健康教师用书 基本运动技能（全一册）”的专题父记录与内部 PDF 标题相同；
+    # 先折叠连续空白再比较，命中时保留子资源原文，避免生成“标题 - 标题”的超长文件名。
+    normalized_root = " ".join(root_title.split()).casefold()
+    normalized_resource = " ".join(resource_title.split()).casefold()
+    if normalized_root == normalized_resource:
+        return resource_title
+    return f"{root_title} - {resource_title}"
+
 def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] | None: # 解析资源，获取资源下载链接
     try:
         resources_info: list[tuple[str, str, str, list[dict]]] = []
@@ -104,7 +117,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
         def get_resource_info(resource_data: dict, root_title: str | None = None) -> tuple[str, str, str, list[dict]] | None:
             title_data = resource_data.get("global_title")
             resource_title: str = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or resource_data.get("title") or resource_data.get("id")
-            title = f"{root_title} - {resource_title}" if root_title else resource_title
+            title = combine_resource_title(root_title, resource_title)
             resource_url: str | None = None
             resource_format = "pdf"
 
@@ -221,7 +234,7 @@ def parse(url: str, bookmarks: bool) -> list[tuple[str, str, str, list[dict]]] |
             # 音频资源的标题存放在 global_title 字典中（键为语言代码，如 zh-CN）
             title_data = audio_data.get("global_title")
             audio_title: str = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or audio_data.get("title") or audio_data.get("id")
-            title = f"{root_title} - {audio_title}" if root_title else audio_title
+            title = combine_resource_title(root_title, audio_title)
             resource_url: str | None = None
             resource_format = "mp3"
 
