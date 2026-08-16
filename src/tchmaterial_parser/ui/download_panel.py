@@ -7,6 +7,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from requests import RequestException
+
 from .runtime import thread_it, ui_call
 from .. import config
 from ..api import parse
@@ -15,6 +17,7 @@ from ..network import headers, session
 from ..platform_utils import print_error
 
 download_states: list[dict] = [] # 初始化下载状态
+PRIVATE_DOWNLOAD_HOSTS = tuple(f"r{index}-ndr-private.ykt.cbern.com.cn" for index in range(1, 4))
 
 def authenticated_download_url(url: str) -> str:
     """仅在真正发起请求时为私有资源附加 Token，避免把凭据写入状态或错误信息。"""
@@ -26,6 +29,49 @@ def authenticated_download_url(url: str) -> str:
     query = [(name, value) for name, value in parse_qsl(parts.query, keep_blank_values=True) if name != "accessToken"]
     query.append(("accessToken", config.access_token))
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+def download_mirror_urls(url: str) -> list[str]:
+    """按原地址优先的顺序生成私有 CDN 镜像，普通下载地址保持不变。"""
+    parts = urlsplit(url)
+    hostname = parts.hostname or ""
+    if hostname not in PRIVATE_DOWNLOAD_HOSTS:
+        return [url]
+
+    ordered_hosts = [hostname, *(host for host in PRIVATE_DOWNLOAD_HOSTS if host != hostname)]
+    return [urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment)) for host in ordered_hosts]
+
+def request_download(url: str):
+    """请求资源并在镜像出错时自动切换，返回最终响应和已尝试的无凭据地址。"""
+    attempted_urls: list[str] = []
+    last_response = None
+    last_exception: RequestException | None = None
+
+    for candidate_url in download_mirror_urls(url):
+        attempted_urls.append(candidate_url)
+        try:
+            response = session.get(authenticated_download_url(candidate_url), headers=headers, stream=True)
+        except RequestException as e:
+            last_exception = e
+            continue
+
+        if response.ok:
+            if last_response is not None:
+                last_response.close()
+            return response, attempted_urls
+
+        if last_response is not None:
+            last_response.close()
+        last_response = response
+
+        # 认证失败通常与镜像无关，立即返回以免重复请求。
+        if response.status_code in (401, 403):
+            break
+
+    if last_response is not None:
+        return last_response, attempted_urls
+    if last_exception is not None:
+        raise last_exception
+    raise RuntimeError("没有可用的下载地址")
 
 def bind_widgets(text: tk.Text, bookmark: tk.BooleanVar, button: ttk.Button, progress_bar: ttk.Progressbar, label: ttk.Label) -> None: # 由 app.py 在创建控件后写入
     global url_text, bookmark_var, download_btn, download_progress_bar, progress_label
@@ -128,8 +174,7 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
     temp_path = f"{save_path}.tmp"
 
     try:
-        # 官网会把 Access Token 同时放入私有 CDN 的查询参数；Authorization 请求头本身不足以访问所有资源。
-        response = session.get(authenticated_download_url(url), headers=headers, stream=True)
+        response, _attempted_urls = request_download(url)
 
         if not response.ok: # 服务器返回表示错误的 HTTP 状态码
             current_state["finished"] = True

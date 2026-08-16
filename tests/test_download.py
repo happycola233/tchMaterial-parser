@@ -5,18 +5,22 @@ from src.tchmaterial_parser.ui import download_panel, runtime
 
 class FakeResponse:
     def __init__(self, status_code: int) -> None:
-        self.ok = False
+        self.ok = status_code < 400
         self.status_code = status_code
+
+    def close(self) -> None:
+        pass
 
 
 class FakeSession:
-    def __init__(self, status_code: int) -> None:
-        self.status_code = status_code
+    def __init__(self, status_code: int | list[int]) -> None:
+        self.status_codes = status_code if isinstance(status_code, list) else [status_code]
         self.requested_urls: list[str] = []
 
     def get(self, *args: tuple, **kwargs: dict) -> FakeResponse:
         self.requested_urls.append(args[0])
-        return FakeResponse(self.status_code)
+        status_code = self.status_codes[min(len(self.requested_urls) - 1, len(self.status_codes) - 1)]
+        return FakeResponse(status_code)
 
 
 class FakeWidget:
@@ -77,6 +81,36 @@ class DownloadFailureTest(unittest.TestCase):
 
         download_panel.config.access_token = "private-token"
         self.assertEqual(download_panel.authenticated_download_url(public_url), public_url)
+
+    def test_retries_private_download_on_the_next_mirror(self) -> None:
+        download_panel.config.access_token = "private-token"
+        fake_session = FakeSession([500, 200])
+        download_panel.session = fake_session
+        original_url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf"
+
+        response, attempted_urls = download_panel.request_download(original_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([url.split("/", 3)[2] for url in attempted_urls], [
+            "r1-ndr-private.ykt.cbern.com.cn",
+            "r2-ndr-private.ykt.cbern.com.cn",
+        ])
+        self.assertTrue(all("accessToken=private-token" in url for url in fake_session.requested_urls))
+        self.assertTrue(all("accessToken" not in url for url in attempted_urls))
+
+    def test_does_not_retry_authentication_failures_or_public_urls(self) -> None:
+        private_url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf"
+        public_url = "https://example.com/book.pdf"
+
+        private_session = FakeSession(401)
+        download_panel.session = private_session
+        _response, private_attempts = download_panel.request_download(private_url)
+        self.assertEqual(private_attempts, [private_url])
+
+        public_session = FakeSession(500)
+        download_panel.session = public_session
+        _response, public_attempts = download_panel.request_download(public_url)
+        self.assertEqual(public_attempts, [public_url])
 
 
 if __name__ == "__main__":
