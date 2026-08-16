@@ -2,13 +2,32 @@
 # 设置 Access Token 的窗口，以及其中的获取方法说明窗口
 
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk, messagebox
+import webbrowser
 
-from . import runtime
+from . import runtime, theme
 from .runtime import scaled
 from .theme import ACCENT_BUTTON_STYLE, apply_titlebar_theme, register_themed_widget
 from .widgets import bind_context_menu, bind_tab_navigation, center_window
 from .. import config
+
+ACCESS_TOKEN_LOGIN_URL = "https://auth.smartedu.cn/uias/login"
+ACCESS_TOKEN_SCRIPT = """\
+(function () {
+  const authKey = Object.keys(localStorage).find(
+    (key) => key.startsWith("ND_UC_AUTH")
+  );
+  if (!authKey) {
+    console.error("未找到 Access Token，请确保已登录！");
+    return;
+  }
+  const tokenData = JSON.parse(localStorage.getItem(authKey));
+  const accessToken = JSON.parse(tokenData.value).access_token;
+  console.log(
+    "%cAccess Token:", "color: green; font-weight: bold", accessToken
+  );
+})();"""
 
 def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     token_window = tk.Toplevel(runtime.root)
@@ -63,44 +82,172 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     def show_token_help() -> None:
         help_win = tk.Toplevel(token_window)
         help_win.title("获取 Access Token 方法")
-        help_win.resizable(False, False) # 禁止调整窗口大小
+        help_win.resizable(True, True)
         help_win.focus() # 自动获得焦点
         help_win.transient(token_window) # 使窗口依赖于主窗口
         help_win.bind("<Escape>", lambda event: help_win.destroy()) # 绑定 Esc 键关闭窗口
 
-        help_frame = ttk.Frame(help_win, padding=scaled(20))
+        # 卡片中的文字需要使用与卡片一致的背景色，避免主题切换时出现色块。
+        style = ttk.Style(help_win)
+        style.configure(
+            "TokenHelpCard.TFrame",
+            background=theme.current_colors["surface"],
+            borderwidth=0,
+            relief="flat",
+        )
+        style.configure(
+            "TokenHelpCard.TLabel",
+            background=theme.current_colors["surface"],
+            foreground=theme.current_colors["fg"],
+        )
+        style.configure(
+            "TokenHelpCardStrong.TLabel",
+            font="AppStrongFont",
+            background=theme.current_colors["surface"],
+            foreground=theme.current_colors["fg"],
+        )
+        style.configure(
+            "TokenHelpCardCaption.TLabel",
+            font="AppCaptionFont",
+            background=theme.current_colors["surface"],
+            foreground=theme.current_colors["muted"],
+        )
+
+        help_frame = ttk.Frame(help_win, padding=(scaled(24), scaled(20)))
         help_frame.pack(fill="both", expand=True)
 
-        help_text = """\
-国家中小学智慧教育平台需要登录后才可获取资源，因此要使用本程序下载资源，您需要在平台内登录账号（如没有需注册），然后获得登录凭据（Access Token）。本程序仅保存该凭据至本地。
+        ttk.Label(help_frame, text="从浏览器获取 Access Token", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(
+            help_frame,
+            text="按下面的步骤操作即可。登录凭据只会保存在本机。",
+            style="Caption.TLabel",
+        ).pack(anchor="w", pady=(scaled(3), scaled(16)))
 
-获取方法如下：
-1. 打开浏览器，访问国家中小学智慧教育平台（https://auth.smartedu.cn/uias/login）并登录账号。
-2. 按下 F12 或 Ctrl+Shift+I，或右键——检查（审查元素）打开开发者工具，选择控制台（Console）。
-3. 在控制台粘贴以下代码后回车（Enter）：
----------------------------------------------------------
-(function() {
-    const authKey = Object.keys(localStorage).find(key => key.startsWith("ND_UC_AUTH"));
-    if (!authKey) {
-        console.error("未找到 Access Token，请确保已登录！");
-        return;
-    }
-    const tokenData = JSON.parse(localStorage.getItem(authKey));
-    const accessToken = JSON.parse(tokenData.value).access_token;
-    console.log("%cAccess Token:", "color: green; font-weight: bold", accessToken);
-})();
----------------------------------------------------------
-然后在控制台输出中即可看到 Access Token。将其复制后粘贴到本程序中。"""
+        def add_step(number: str, title: str, description: str) -> ttk.Frame:
+            step = ttk.Frame(help_frame)
+            step.pack(fill="x", pady=(0, scaled(12)))
+            ttk.Label(step, text=number, style="Heading.TLabel", width=2).grid(row=0, column=0, sticky="nw")
+            content = ttk.Frame(step)
+            content.grid(row=0, column=1, sticky="ew")
+            step.columnconfigure(1, weight=1)
+            ttk.Label(content, text=title, style="Heading.TLabel").pack(anchor="w")
+            ttk.Label(
+                content,
+                text=description,
+                style="Caption.TLabel",
+                justify="left",
+                wraplength=scaled(650),
+            ).pack(anchor="w", pady=(scaled(2), 0))
+            return content
 
-        # 只读文本区，支持选择复制（外面套一层卡片，以获得与其他控件一致的圆角边框）
-        help_card = ttk.Frame(help_frame, style="Card.TFrame")
-        help_card.pack(fill="both", expand=True)
-        txt = tk.Text(help_card, width=88, height=24, wrap="word", font="AppCaptionFont", padx=scaled(4), pady=scaled(4))
-        txt.insert("1.0", help_text)
-        txt.config(state="disabled")
-        txt.pack(fill="both", expand=True)
-        register_themed_widget(txt)
-        bind_context_menu(txt, "readonly")
+        login_step = add_step(
+            "1",
+            "登录国家中小学智慧教育平台",
+            "使用你的平台账号完成登录；如果还没有账号，请先注册。",
+        )
+
+        def open_login_page() -> None:
+            try:
+                if not webbrowser.open_new_tab(ACCESS_TOKEN_LOGIN_URL):
+                    raise RuntimeError("系统未能打开默认浏览器")
+            except Exception as error:
+                messagebox.showerror(
+                    "无法打开登录页面",
+                    f"请复制下面的地址并在浏览器中打开：\n{ACCESS_TOKEN_LOGIN_URL}\n\n{error}",
+                    parent=help_win,
+                )
+
+        ttk.Button(login_step, text="打开登录页面 ↗", command=open_login_page).pack(anchor="w", pady=(scaled(8), 0))
+
+        add_step(
+            "2",
+            "打开浏览器控制台",
+            "按 F12 或 Ctrl + Shift + I，也可以右键页面并选择“检查”；然后切换到“控制台（Console）”。",
+        )
+        add_step(
+            "3",
+            "复制并运行脚本",
+            "点击“复制代码”，粘贴到浏览器控制台，然后按 Enter 运行。只需复制下面代码框中的内容。",
+        )
+
+        # 代码与说明分离，用户可以清楚看到唯一需要复制到控制台的内容。
+        code_card = ttk.Frame(help_frame, style="Card.TFrame", padding=(scaled(14), scaled(12)))
+        code_card.pack(fill="both", expand=True, padx=(scaled(28), 0))
+
+        # Card.TFrame 自带边框，只用于最外层卡片；内部容器使用无边框样式，避免出现重叠细线。
+        code_header = ttk.Frame(code_card, style="TokenHelpCard.TFrame")
+        code_header.pack(fill="x", pady=(0, scaled(8)))
+        code_title = ttk.Frame(code_header, style="TokenHelpCard.TFrame")
+        code_title.pack(side="left", fill="x", expand=True)
+        ttk.Label(
+            code_title,
+            text="复制到浏览器控制台",
+            style="TokenHelpCardStrong.TLabel",
+        ).pack(anchor="w")
+        copy_status = ttk.Label(
+            code_title,
+            text="此按钮只复制脚本，不会复制其他说明文字",
+            style="TokenHelpCardCaption.TLabel",
+        )
+        copy_status.pack(anchor="w", pady=(scaled(2), 0))
+
+        def copy_script() -> None:
+            try:
+                help_win.clipboard_clear()
+                help_win.clipboard_append(ACCESS_TOKEN_SCRIPT)
+                copy_button.configure(text="✓ 已复制")
+                copy_status.configure(text="已复制，可直接粘贴到浏览器控制台")
+            except tk.TclError as error:
+                messagebox.showerror("复制失败", f"无法写入剪贴板：\n{error}", parent=help_win)
+
+        copy_button = ttk.Button(
+            code_header,
+            text="复制代码",
+            style=ACCENT_BUTTON_STYLE,
+            command=copy_script,
+        )
+        copy_button.pack(side="right", padx=(scaled(12), 0))
+
+        # Cascadia Mono 的代码字形更清晰美观；系统未安装时保留 TkFixedFont 原有的字体回退逻辑。
+        code_font = tkfont.nametofont("TkFixedFont").copy()
+        if "Cascadia Mono" in tkfont.families(help_win):
+            code_font.configure(family="Cascadia Mono")
+
+        code_text = tk.Text(
+            code_card,
+            width=78,
+            height=14,
+            wrap="none",
+            font=code_font,
+            padx=scaled(10),
+            pady=scaled(8),
+            cursor="arrow",
+        )
+        setattr(code_text, "_font_ref", code_font) # 防止局部字体对象被垃圾回收后失效
+        code_text.insert("1.0", ACCESS_TOKEN_SCRIPT)
+        code_text.config(state="disabled")
+        code_text.pack(fill="both", expand=True)
+        register_themed_widget(code_text)
+        bind_context_menu(code_text, "readonly")
+
+        result_card = ttk.Frame(help_frame, style="Card.TFrame", padding=(scaled(14), scaled(11)))
+        result_card.pack(fill="x", padx=(scaled(28), 0), pady=(scaled(12), 0))
+        ttk.Label(
+            result_card,
+            text="运行后，还要复制控制台输出的 Token",
+            style="TokenHelpCardStrong.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            result_card,
+            text="找到“Access Token: …”，只复制冒号后面的完整 Token 值，再返回上一窗口粘贴并保存。",
+            style="TokenHelpCard.TLabel",
+            justify="left",
+            wraplength=scaled(700),
+        ).pack(anchor="w", pady=(scaled(3), 0))
+
+        button_frame = ttk.Frame(help_frame)
+        button_frame.pack(fill="x", pady=(scaled(16), 0))
+        ttk.Button(button_frame, text="关闭", command=help_win.destroy).pack(side="right")
 
         center_window(help_win, token_window) # 让帮助弹窗居中
         apply_titlebar_theme(help_win) # 让标题栏跟随主题
