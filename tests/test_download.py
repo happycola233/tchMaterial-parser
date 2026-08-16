@@ -1,12 +1,15 @@
 import unittest
 
+from requests import ConnectionError
+
 from src.tchmaterial_parser.ui import download_panel, runtime
 
 
 class FakeResponse:
-    def __init__(self, status_code: int) -> None:
+    def __init__(self, status_code: int, content: bytes = b"") -> None:
         self.ok = status_code < 400
         self.status_code = status_code
+        self.content = content
 
     def close(self) -> None:
         pass
@@ -26,6 +29,11 @@ class FakeSession:
 class FakeWidget:
     def config(self, **kwargs: dict) -> None:
         pass
+
+
+class FailingSession:
+    def get(self, url: str, **kwargs: dict) -> FakeResponse:
+        raise ConnectionError(f"无法访问 {url}")
 
 
 class DownloadFailureTest(unittest.TestCase):
@@ -49,12 +57,20 @@ class DownloadFailureTest(unittest.TestCase):
         self.assertEqual(self.failure_reason(404), "服务器返回 HTTP 状态码 404")
 
     def test_appends_a_token_hint_to_authentication_failures(self) -> None:
+        download_panel.config.access_token = "private-token"
         for status_code in (401, 403):
             with self.subTest(status_code=status_code):
                 self.assertEqual(
                     self.failure_reason(status_code),
                     f"服务器返回 HTTP 状态码 {status_code}，Access Token 可能已过期或无效，请重新设置",
                 )
+
+    def test_asks_for_token_when_anonymous_request_requires_authentication(self) -> None:
+        download_panel.config.access_token = None
+        self.assertEqual(
+            self.failure_reason(401),
+            "服务器返回 HTTP 状态码 401，该资源需要有效的 Access Token，请先设置",
+        )
 
     def test_adds_access_token_only_to_private_request_url(self) -> None:
         token = "private-token"
@@ -111,6 +127,33 @@ class DownloadFailureTest(unittest.TestCase):
         download_panel.session = public_session
         _response, public_attempts = download_panel.request_download(public_url)
         self.assertEqual(public_attempts, [public_url])
+
+    def test_explains_private_storage_authentication_errors(self) -> None:
+        response = FakeResponse(400, b"<Error><Code>InvalidArgument</Code></Error>")
+        attempted_urls = ["https://r1.example/book.pdf", "https://r2.example/book.pdf"]
+
+        download_panel.config.access_token = None
+        self.assertEqual(
+            download_panel.download_failure_reason(response, attempted_urls),
+            "服务器返回 HTTP 状态码 400（InvalidArgument），该私有资源需要有效的 Access Token，请先设置，已尝试 2 个下载镜像",
+        )
+
+        download_panel.config.access_token = "private-token"
+        self.assertEqual(
+            download_panel.download_failure_reason(response, attempted_urls),
+            "服务器返回 HTTP 状态码 400（InvalidArgument），私有资源鉴权失败，Access Token 可能已过期或无效，请重新设置，已尝试 2 个下载镜像",
+        )
+
+    def test_redacts_token_from_network_exceptions(self) -> None:
+        token = "private-token"
+        download_panel.config.access_token = token
+        download_panel.session = FailingSession()
+
+        with self.assertRaises(RuntimeError) as context:
+            download_panel.request_download("https://r1-ndr-private.ykt.cbern.com.cn/book.pdf")
+
+        self.assertNotIn(token, str(context.exception))
+        self.assertIn("accessToken=<已隐藏>", str(context.exception))
 
 
 if __name__ == "__main__":
