@@ -12,8 +12,10 @@ class FakeResponse:
 class FakeSession:
     def __init__(self, status_code: int) -> None:
         self.status_code = status_code
+        self.requested_urls: list[str] = []
 
     def get(self, *args: tuple, **kwargs: dict) -> FakeResponse:
+        self.requested_urls.append(args[0])
         return FakeResponse(self.status_code)
 
 
@@ -28,6 +30,8 @@ class DownloadFailureTest(unittest.TestCase):
         runtime.app_closing = True
         self.addCleanup(setattr, runtime, "app_closing", False)
         self.addCleanup(setattr, download_panel, "session", download_panel.session)
+        previous_token = download_panel.config.access_token
+        self.addCleanup(setattr, download_panel.config, "access_token", previous_token)
         widget = FakeWidget()
         download_panel.bind_widgets(widget, widget, widget, widget, widget)
 
@@ -47,6 +51,32 @@ class DownloadFailureTest(unittest.TestCase):
                     self.failure_reason(status_code),
                     f"服务器返回 HTTP 状态码 {status_code}，Access Token 可能已过期或无效，请重新设置",
                 )
+
+    def test_adds_access_token_only_to_private_request_url(self) -> None:
+        token = "private-token"
+        download_panel.config.access_token = token
+        fake_session = FakeSession(404)
+        download_panel.session = fake_session
+        original_url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf?source=catalog"
+
+        download_panel.download_states = []
+        download_panel.download_file(original_url, "book.pdf")
+
+        requested_url = fake_session.requested_urls[0]
+        self.assertIn("source=catalog", requested_url)
+        self.assertIn("accessToken=private-token", requested_url)
+        self.assertEqual(download_panel.download_states[0]["download_url"], original_url)
+        self.assertNotIn(token, download_panel.download_states[0]["failed_reason"])
+
+    def test_keeps_anonymous_and_non_private_urls_unchanged(self) -> None:
+        private_url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf"
+        public_url = "https://example.com/book.pdf"
+
+        download_panel.config.access_token = None
+        self.assertEqual(download_panel.authenticated_download_url(private_url), private_url)
+
+        download_panel.config.access_token = "private-token"
+        self.assertEqual(download_panel.authenticated_download_url(public_url), public_url)
 
 
 if __name__ == "__main__":

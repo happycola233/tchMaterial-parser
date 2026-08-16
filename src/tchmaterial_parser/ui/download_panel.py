@@ -5,6 +5,7 @@
 import os, traceback
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .runtime import thread_it, ui_call
 from .. import config
@@ -14,6 +15,17 @@ from ..network import headers, session
 from ..platform_utils import print_error
 
 download_states: list[dict] = [] # 初始化下载状态
+
+def authenticated_download_url(url: str) -> str:
+    """仅在真正发起请求时为私有资源附加 Token，避免把凭据写入状态或错误信息。"""
+    parts = urlsplit(url)
+    hostname = parts.hostname or ""
+    if not config.access_token or not hostname.endswith("-ndr-private.ykt.cbern.com.cn"):
+        return url
+
+    query = [(name, value) for name, value in parse_qsl(parts.query, keep_blank_values=True) if name != "accessToken"]
+    query.append(("accessToken", config.access_token))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 def bind_widgets(text: tk.Text, bookmark: tk.BooleanVar, button: ttk.Button, progress_bar: ttk.Progressbar, label: ttk.Label) -> None: # 由 app.py 在创建控件后写入
     global url_text, bookmark_var, download_btn, download_progress_bar, progress_label
@@ -116,7 +128,8 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
     temp_path = f"{save_path}.tmp"
 
     try:
-        response = session.get(url, headers=headers, stream=True)
+        # 官网会把 Access Token 同时放入私有 CDN 的查询参数；Authorization 请求头本身不足以访问所有资源。
+        response = session.get(authenticated_download_url(url), headers=headers, stream=True)
 
         if not response.ok: # 服务器返回表示错误的 HTTP 状态码
             current_state["finished"] = True
