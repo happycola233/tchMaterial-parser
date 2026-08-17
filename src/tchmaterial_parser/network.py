@@ -4,7 +4,7 @@
 import requests
 
 session = requests.Session() # 初始化请求
-session.proxies = {} # 全局忽略代理
+session.trust_env = False # 不读取系统或环境变量中的代理配置
 
 headers = { # 设置请求头部，包含认证信息
     "Authorization": "Bearer 0",
