@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # 设置 Access Token 的窗口，以及其中的获取方法说明窗口
 
+import json
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, messagebox
@@ -13,20 +14,28 @@ from .widgets import bind_context_menu, bind_tab_navigation, center_window
 from .. import config
 
 ACCESS_TOKEN_LOGIN_URL = "https://auth.smartedu.cn/uias/login"
+# 从官网 ND_UC_AUTH 取出签名所需的 access_token、mac_key、diff。
 ACCESS_TOKEN_SCRIPT = """\
 (function () {
   const authKey = Object.keys(localStorage).find(
     (key) => key.startsWith("ND_UC_AUTH")
   );
   if (!authKey) {
-    console.error("未找到 Access Token，请确保已登录！");
+    console.error("未找到登录凭据，请确保已登录！");
     return;
   }
   const tokenData = JSON.parse(localStorage.getItem(authKey));
-  const accessToken = JSON.parse(tokenData.value).access_token;
+  const value = JSON.parse(tokenData.value);
+  const credentials = JSON.stringify({
+    access_token: value.access_token,
+    mac_key: value.mac_key,
+    diff: value.diff,
+  });
   console.log(
-    "%cAccess Token:", "color: green; font-weight: bold", accessToken
+    "%c请复制下面整段 JSON 并粘贴到下载工具：",
+    "color: green; font-weight: bold"
   );
+  console.log(credentials);
 })();"""
 
 def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
@@ -44,9 +53,15 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     frame.pack(fill="both", expand=True)
 
     # 提示文本
-    label = ttk.Label(frame, text="请粘贴从浏览器获取的 Access Token", style="Heading.TLabel")
+    label = ttk.Label(frame, text="请粘贴从浏览器获取的登录凭据", style="Heading.TLabel")
     label.pack(anchor="w")
-    hint_label = ttk.Label(frame, text="需要先在国家中小学智慧教育平台登录账号，该凭据仅保存在本机。", style="Caption.TLabel")
+    hint_label = ttk.Label(
+        frame,
+        text="请先点击左下角“如何获取？”查看操作步骤，再把控制台输出的整段 JSON 粘贴到下方。凭据仅保存在本机。",
+        style="Caption.TLabel",
+        wraplength=scaled(360),
+        justify="left",
+    )
     hint_label.pack(anchor="w", pady=(scaled(2), scaled(10)))
 
     # 创建多行 Text（外面套一层卡片，以获得与其他控件一致的圆角边框）
@@ -59,8 +74,14 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     bind_tab_navigation(token_text)
     token_text.focus()
 
-    # 若已存在全局 token，则填入
-    if config.access_token:
+    # 有 mac_key 时回填 JSON。若只回填 Access Token，用户点保存会走“纯 Token”解析，丢掉签名密钥。
+    if config.access_token and config.mac_key:
+        token_text.insert("1.0", json.dumps({
+            "access_token": config.access_token,
+            "mac_key": config.mac_key,
+            "diff": config.token_diff,
+        }, ensure_ascii=False, indent=2))
+    elif config.access_token:
         token_text.insert("1.0", config.access_token)
 
     # 按下 Enter 键，保存 Access Token，并屏蔽换行事件
@@ -121,10 +142,10 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         help_frame = ttk.Frame(help_win, padding=(scaled(24), scaled(20)))
         help_frame.pack(fill="both", expand=True)
 
-        ttk.Label(help_frame, text="从浏览器获取 Access Token", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(help_frame, text="从浏览器获取登录凭据", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             help_frame,
-            text="按下面的步骤操作即可。登录凭据只会保存在本机。",
+            text="按下面的步骤操作即可。复制控制台输出的整段 JSON，登录凭据只会保存在本机。",
             style="Caption.TLabel",
         ).pack(anchor="w", pady=(scaled(3), scaled(16)))
 
@@ -250,12 +271,12 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
         result_card.pack(fill="x", padx=(scaled(28), 0), pady=(scaled(12), 0))
         ttk.Label(
             result_card,
-            text="运行后，还要复制控制台输出的 Token",
+            text="运行后，复制控制台输出的整段 JSON",
             style="TokenHelpCardStrong.TLabel",
         ).pack(anchor="w")
         ttk.Label(
             result_card,
-            text="找到“Access Token: …”，只复制冒号后面的完整 Token 值，再返回上一窗口粘贴并保存。",
+            text="复制花括号包起来的那一整行，再返回上一窗口粘贴并保存。",
             style="TokenHelpCard.TLabel",
             justify="left",
             wraplength=scaled(700),

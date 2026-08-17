@@ -19,9 +19,11 @@ class FakeSession:
     def __init__(self, status_code: int | list[int]) -> None:
         self.status_codes = status_code if isinstance(status_code, list) else [status_code]
         self.requested_urls: list[str] = []
+        self.requested_headers: list[dict | None] = []
 
     def get(self, *args: tuple, **kwargs: dict) -> FakeResponse:
         self.requested_urls.append(args[0])
+        self.requested_headers.append(kwargs.get("headers"))
         status_code = self.status_codes[min(len(self.requested_urls) - 1, len(self.status_codes) - 1)]
         return FakeResponse(status_code)
 
@@ -43,7 +45,16 @@ class DownloadFailureTest(unittest.TestCase):
         self.addCleanup(setattr, runtime, "app_closing", False)
         self.addCleanup(setattr, download_panel, "session", download_panel.session)
         previous_token = download_panel.config.access_token
+        previous_mac = download_panel.config.mac_key
+        previous_diff = download_panel.config.token_diff
         self.addCleanup(setattr, download_panel.config, "access_token", previous_token)
+        self.addCleanup(setattr, download_panel.config, "mac_key", previous_mac)
+        self.addCleanup(setattr, download_panel.config, "token_diff", previous_diff)
+        download_panel.config.mac_key = None
+        download_panel.config.token_diff = 0
+        previous_interval = download_panel._MIN_REQUEST_INTERVAL
+        self.addCleanup(setattr, download_panel, "_MIN_REQUEST_INTERVAL", previous_interval)
+        download_panel._MIN_REQUEST_INTERVAL = 0
         widget = FakeWidget()
         download_panel.bind_widgets(widget, widget, widget, widget, widget)
 
@@ -72,7 +83,7 @@ class DownloadFailureTest(unittest.TestCase):
             "服务器返回 HTTP 状态码 401，该资源需要有效的 Access Token，请先设置",
         )
 
-    def test_adds_access_token_only_to_private_request_url(self) -> None:
+    def test_keeps_token_out_of_private_request_url(self) -> None:
         token = "private-token"
         download_panel.config.access_token = token
         fake_session = FakeSession(404)
@@ -83,20 +94,29 @@ class DownloadFailureTest(unittest.TestCase):
         download_panel.download_file(original_url, "book.pdf")
 
         requested_url = fake_session.requested_urls[0]
-        self.assertIn("source=catalog", requested_url)
-        self.assertIn("accessToken=private-token", requested_url)
+        self.assertEqual(requested_url, original_url)
+        self.assertNotIn("accessToken", requested_url)
+        self.assertEqual(
+            fake_session.requested_headers[0]["X-ND-AUTH"],
+            'MAC id="private-token",nonce="0",mac="0"',
+        )
         self.assertEqual(download_panel.download_states[0]["download_url"], original_url)
         self.assertNotIn(token, download_panel.download_states[0]["failed_reason"])
 
-    def test_keeps_anonymous_and_non_private_urls_unchanged(self) -> None:
-        private_url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf"
-        public_url = "https://example.com/book.pdf"
+    def test_signs_private_download_when_mac_key_is_present(self) -> None:
+        download_panel.config.access_token = "tok"
+        download_panel.config.mac_key = "key"
+        download_panel.config.token_diff = 0
+        fake_session = FakeSession(200)
+        download_panel.session = fake_session
+        url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf"
 
-        download_panel.config.access_token = None
-        self.assertEqual(download_panel.authenticated_download_url(private_url), private_url)
+        download_panel.request_download(url)
 
-        download_panel.config.access_token = "private-token"
-        self.assertEqual(download_panel.authenticated_download_url(public_url), public_url)
+        auth = fake_session.requested_headers[0]["X-ND-AUTH"]
+        self.assertTrue(auth.startswith('MAC id="tok",nonce="'))
+        self.assertNotIn('nonce="0"', auth)
+        self.assertNotIn("accessToken", fake_session.requested_urls[0])
 
     def test_retries_private_download_on_the_next_mirror(self) -> None:
         download_panel.config.access_token = "private-token"
@@ -111,8 +131,48 @@ class DownloadFailureTest(unittest.TestCase):
             "r1-ndr-private.ykt.cbern.com.cn",
             "r2-ndr-private.ykt.cbern.com.cn",
         ])
-        self.assertTrue(all("accessToken=private-token" in url for url in fake_session.requested_urls))
+        self.assertEqual(fake_session.requested_urls, [
+            "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf",
+            "https://r2-ndr-private.ykt.cbern.com.cn/book.pdf",
+        ])
         self.assertTrue(all("accessToken" not in url for url in attempted_urls))
+
+    def test_retries_same_host_on_transient_400(self) -> None:
+        download_panel.config.access_token = "tok"
+        download_panel.config.mac_key = "key"
+        previous_delays = download_panel._400_RETRY_DELAYS
+        download_panel._400_RETRY_DELAYS = (0,)
+        self.addCleanup(setattr, download_panel, "_400_RETRY_DELAYS", previous_delays)
+        fake_session = FakeSession([400, 200])
+        download_panel.session = fake_session
+        original_url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf"
+
+        response, attempted_urls = download_panel.request_download(original_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(attempted_urls, [original_url])
+        self.assertEqual(fake_session.requested_urls, [original_url, original_url])
+        self.assertNotEqual(
+            fake_session.requested_headers[0]["X-ND-AUTH"],
+            fake_session.requested_headers[1]["X-ND-AUTH"],
+        )
+        self.assertTrue(all("accessToken" not in url for url in fake_session.requested_urls))
+
+    def test_does_not_spray_mirrors_after_persistent_400(self) -> None:
+        download_panel.config.access_token = "tok"
+        download_panel.config.mac_key = "key"
+        previous_delays = download_panel._400_RETRY_DELAYS
+        download_panel._400_RETRY_DELAYS = (0,)
+        self.addCleanup(setattr, download_panel, "_400_RETRY_DELAYS", previous_delays)
+        fake_session = FakeSession(400)
+        download_panel.session = fake_session
+        original_url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf"
+
+        response, attempted_urls = download_panel.request_download(original_url)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(attempted_urls, [original_url])
+        self.assertEqual(fake_session.requested_urls, [original_url, original_url])
 
     def test_does_not_retry_authentication_failures_or_public_urls(self) -> None:
         private_url = "https://r1-ndr-private.ykt.cbern.com.cn/book.pdf"
@@ -141,7 +201,7 @@ class DownloadFailureTest(unittest.TestCase):
         download_panel.config.access_token = "private-token"
         self.assertEqual(
             download_panel.download_failure_reason(response, attempted_urls),
-            "服务器返回 HTTP 状态码 400（InvalidArgument），私有资源鉴权失败，Access Token 可能已过期或无效，请重新设置，已尝试 2 个下载镜像",
+            "服务器返回 HTTP 状态码 400（InvalidArgument），私有资源暂时无法访问。请稍后重试；若持续失败，请重新设置 Access Token，已尝试 2 个下载镜像",
         )
 
     def test_redacts_token_from_network_exceptions(self) -> None:
@@ -153,7 +213,8 @@ class DownloadFailureTest(unittest.TestCase):
             download_panel.request_download("https://r1-ndr-private.ykt.cbern.com.cn/book.pdf")
 
         self.assertNotIn(token, str(context.exception))
-        self.assertIn("accessToken=<已隐藏>", str(context.exception))
+        self.assertIn("ndr-private.ykt.cbern.com.cn/book.pdf", str(context.exception))
+        self.assertNotIn("accessToken", str(context.exception))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import re
 from typing import NamedTuple
 from urllib.parse import urlparse, parse_qs
 
-from .network import headers, session
+from .network import headers, request_headers, session
 from .platform_utils import print_error
 
 class ResourceInfo(NamedTuple):
@@ -190,8 +190,9 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
                             break
 
                     if mapping_url:
-                        # a. 下载 mapping 文件获取页码和 ebook_id
-                        map_resp = session.get(mapping_url)
+                        # a. 下载 mapping 文件获取页码和 ebook_id。
+                        # mapping 也在 ndr-private 上，必须按 URL 现算 X-ND-AUTH，不能用全局占位头。
+                        map_resp = session.get(mapping_url, headers=request_headers(mapping_url))
                         map_data: dict = map_resp.json()
                         ebook_id: str = map_data.get("ebook_id")
 

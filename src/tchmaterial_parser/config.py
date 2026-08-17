@@ -1,16 +1,30 @@
 # -*- coding: utf-8 -*-
-# 本地配置的读写（Windows 用注册表，其余平台用 JSON 文件）与 Access Token 的维护
+# 本地配置的读写（Windows 用注册表，其余平台用 JSON 文件）与登录凭据的维护
+#
+# 鉴权相关三项：
+# - access_token：X-ND-AUTH 的 MAC id，也用于 Authorization: Bearer
+# - mac_key：官网 HMAC 密钥；没有它就只能生成占位头
+# - token_diff：官网 Fe(diff) 的时钟差（毫秒），只影响 nonce 时间戳
+# 不要把 refresh_token 写入配置。旧用户可能只有 AccessToken 注册表值，加载时 mac_key 为空是正常的。
 
 import json, os
 from pathlib import Path
 
+from .auth import TokenCredentials, parse_token_input
 from .network import headers
 from .platform_utils import os_name, print_error, winreg
 
 access_token: str | None = None
+mac_key: str | None = None
+token_diff: int = 0 # 与 UC Token JSON 的 diff 对应，单位毫秒
 
 REGISTRY_PATH = "Software\\tchMaterial-parser" # Windows 下存放配置的注册表键
-CONFIG_KEYS = { "access_token": "AccessToken", "theme": "Theme" } # 配置项名称到注册表值名称的映射（JSON 文件直接使用配置项名称）
+CONFIG_KEYS = { # 配置项名称到注册表值名称的映射（JSON 文件直接使用配置项名称）
+    "access_token": "AccessToken",
+    "mac_key": "MacKey",
+    "token_diff": "TokenDiff",
+    "theme": "Theme",
+}
 
 def config_file_path() -> Path | None: # 获取配置文件路径
     if os_name == "Windows": # 在 Windows 上，配置存放于 %LOCALAPPDATA%\tchMaterial-parser\data.json（此处为备用）
@@ -92,19 +106,34 @@ def save_config(**updates: str) -> None: # 保存配置，并与已有配置合�
     with open(target_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
-def load_access_token(config: dict[str, str]) -> None: # 从已读取的配置中加载 Access Token
-    global access_token
-
-    token = config.get("access_token")
-    if token:
-        access_token = token
-        headers["Authorization"] = f"Bearer {access_token}"
-        headers["X-ND-AUTH"] = f'MAC id="{access_token}",nonce="0",mac="0"'
-
-def set_access_token(token: str) -> str: # 设置并更新 Access Token
-    global access_token
-    save_config(access_token=token)
-    access_token = token
+def apply_static_headers() -> None:
+    """更新全局占位头。私有下载不要用这份 X-ND-AUTH，应走 network.request_headers。"""
     headers["Authorization"] = f"Bearer {access_token or '0'}"
     headers["X-ND-AUTH"] = f'MAC id="{access_token or "0"}",nonce="0",mac="0"'
-    return f"Access Token 已保存！\n{config_location()}"
+
+def apply_credentials(credentials: TokenCredentials) -> None:
+    """写入内存中的凭据并刷新占位头。空 access_token 视为未登录。"""
+    global access_token, mac_key, token_diff
+    access_token = credentials.access_token or None
+    mac_key = credentials.mac_key
+    token_diff = credentials.diff
+    apply_static_headers()
+
+def load_access_token(config: dict[str, str]) -> None: # 从已读取的配置中加载登录凭据
+    token = config.get("access_token") or ""
+    stored_mac = config.get("mac_key") or ""
+    try:
+        stored_diff = int(config.get("token_diff") or 0)
+    except ValueError:
+        stored_diff = 0
+    apply_credentials(TokenCredentials(token, stored_mac or None, stored_diff))
+
+def set_access_token(raw: str) -> str: # 解析并保存用户粘贴的登录凭据
+    credentials = parse_token_input(raw)
+    apply_credentials(credentials)
+    save_config(
+        access_token=credentials.access_token,
+        mac_key=credentials.mac_key or "",
+        token_diff=str(credentials.diff),
+    )
+    return f"登录凭据已保存！\n{config_location()}"

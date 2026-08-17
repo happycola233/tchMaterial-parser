@@ -156,20 +156,25 @@ https://basic.smartedu.cn/tchMaterial/detail?contentType=assets_document&content
        key.startsWith("ND_UC_AUTH"),
      );
      if (!authKey) {
-       console.error("未找到 Access Token，请确保已登录！");
+       console.error("未找到登录凭据，请确保已登录！");
        return;
      }
      const tokenData = JSON.parse(localStorage.getItem(authKey));
-     const accessToken = JSON.parse(tokenData.value).access_token;
+     const value = JSON.parse(tokenData.value);
+     const credentials = JSON.stringify({
+       access_token: value.access_token,
+       mac_key: value.mac_key,
+       diff: value.diff,
+     });
      console.log(
-       "%cAccess Token:",
+       "%c请复制下面整段 JSON 并粘贴到下载工具：",
        "color: green; font-weight: bold",
-       accessToken,
      );
+     console.log(credentials);
    })();
    ```
 
-4. 复制控制台输出的 **Access Token**，然后在本工具中点击 “**设置 Token**” 按钮，粘贴并保存 Token。
+4. 复制控制台输出的 **整段 JSON**，然后在本工具中点击 “**设置 Token**” 按钮，粘贴并保存。
 
 > [!NOTE]
 > Access Token 可能会过期，若下载失败，请重新获取并设置新的 Token。
