@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # 设置 Access Token 的窗口，以及其中的获取方法说明窗口
 
-import json
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, messagebox
@@ -12,6 +11,7 @@ from .runtime import scaled
 from .theme import ACCENT_BUTTON_STYLE, apply_titlebar_theme, register_themed_widget
 from .widgets import bind_context_menu, bind_tab_navigation, center_window
 from .. import config
+from ..auth import format_token_json
 
 ACCESS_TOKEN_LOGIN_URL = "https://auth.smartedu.cn/uias/login"
 # 从官网 ND_UC_AUTH 取出签名所需的 access_token、mac_key、diff。
@@ -57,7 +57,7 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     label.pack(anchor="w")
     hint_label = ttk.Label(
         frame,
-        text="请先点击左下角“如何获取？”查看操作步骤，再把控制台输出的整段 JSON 粘贴到下方。凭据仅保存在本机。",
+        text="请先点击左下角“如何获取？”查看操作步骤，再把控制台输出的整段 JSON 粘贴到下方。凭据仅保存在本机；留空并保存即可清除。",
         style="Caption.TLabel",
         wraplength=scaled(360),
         justify="left",
@@ -67,22 +67,20 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     # 创建多行 Text（外面套一层卡片，以获得与其他控件一致的圆角边框）
     token_card = ttk.Frame(frame, style="Card.TFrame")
     token_card.pack(fill="both", expand=True)
-    token_text = tk.Text(token_card, width=50, height=4, wrap="char", undo=True, font="AppBodyFont", padx=scaled(6), pady=scaled(4))
+    token_text = tk.Text(token_card, width=50, height=6, wrap="char", undo=True, font="AppBodyFont", padx=scaled(6), pady=scaled(4))
     token_text.pack(fill="both", expand=True)
     register_themed_widget(token_text)
     bind_context_menu(token_text)
     bind_tab_navigation(token_text)
     token_text.focus()
 
-    # 有 mac_key 时回填 JSON。若只回填 Access Token，用户点保存会走“纯 Token”解析，丢掉签名密钥。
-    if config.access_token and config.mac_key:
-        token_text.insert("1.0", json.dumps({
-            "access_token": config.access_token,
-            "mac_key": config.mac_key,
-            "diff": config.token_diff,
-        }, ensure_ascii=False, indent=2))
-    elif config.access_token:
-        token_text.insert("1.0", config.access_token)
+    # 旧版可能只存了 Access Token。一律回填三项 JSON，避免输入框仍是纯 Token。
+    if config.access_token:
+        token_text.insert("1.0", format_token_json(
+            config.access_token,
+            config.mac_key,
+            config.token_diff,
+        ))
 
     # 按下 Enter 键，保存 Access Token，并屏蔽换行事件
     def return_save_token(event: tk.Event) -> str:
@@ -95,7 +93,11 @@ def show_access_token_window() -> None: # 打开输入 Access Token 的窗口
     # 保存按钮
     def save_token() -> None:
         user_token = token_text.get("1.0", "end").strip()
-        tip_info = config.set_access_token(user_token)
+        try:
+            tip_info = config.set_access_token(user_token)
+        except ValueError as error:
+            messagebox.showerror("保存失败", str(error), parent=token_window)
+            return
         messagebox.showinfo("保存成功", tip_info, parent=token_window)
         token_window.destroy()
 

@@ -128,7 +128,7 @@ def load_access_token(config: dict[str, str]) -> None: # 从已读取的配置�
         stored_diff = 0
     apply_credentials(TokenCredentials(token, stored_mac or None, stored_diff))
 
-def set_access_token(raw: str) -> str: # 解析并保存用户粘贴的登录凭据
+def set_access_token(raw: str) -> str: # 校验三项 JSON 并保存；空内容则清除已保存的登录凭据
     credentials = parse_token_input(raw)
     apply_credentials(credentials)
     save_config(
@@ -136,4 +136,6 @@ def set_access_token(raw: str) -> str: # 解析并保存用户粘贴的登录凭
         mac_key=credentials.mac_key or "",
         token_diff=str(credentials.diff),
     )
+    if not credentials.access_token:
+        return f"登录凭据已清除。\n{config_location()}"
     return f"登录凭据已保存！\n{config_location()}"

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 官网 UC SDK 的 X-ND-AUTH 生成，以及用户粘贴登录凭据时的格式解析
+# 官网 UC SDK 的 X-ND-AUTH 生成，以及用户粘贴登录凭据时的 JSON 校验
 #
 # 官网在登录后把凭据写入 localStorage 的 ND_UC_AUTH-* ，页面里的 getAuthHeader /
 # getAuthHeaderAsync 每次请求都会现算签名，而不是复用抓包里的一整段头。
@@ -74,29 +74,60 @@ def build_nd_auth(
     mac = sign_mac(signature_string(url, method, nonce), mac_key)
     return f'MAC id="{token_id}",nonce="{nonce}",mac="{mac}"'
 
-def _as_int(value: object, default: int = 0) -> int:
+TOKEN_JSON_FIELDS = ("access_token", "mac_key", "diff")
+
+class TokenInputError(ValueError):
+    """粘贴的登录凭据不是含 access_token、mac_key、diff 的 JSON。"""
+
+def format_token_json(access_token: str, mac_key: str | None = None, diff: int = 0) -> str:
+    """把已保存的字段格式化成设置窗口用的三项 JSON。旧版只有 Access Token 时 mac_key 为空串。"""
+    return json.dumps({
+        "access_token": access_token,
+        "mac_key": mac_key or "",
+        "diff": int(diff),
+    }, ensure_ascii=False, indent=2)
+
+def _require_int(value: object, field: str) -> int:
+    if isinstance(value, bool):
+        raise TokenInputError(f"{field} 必须是整数。")
     try:
         return int(value) # type: ignore[arg-type]
     except (TypeError, ValueError):
-        return default
+        raise TokenInputError(f"{field} 必须是整数。") from None
+
+def _credentials_from_mapping(data: dict) -> TokenCredentials:
+    missing = [field for field in TOKEN_JSON_FIELDS if field not in data]
+    if missing:
+        raise TokenInputError(
+            f"登录凭据缺少字段：{', '.join(missing)}。必须包含 access_token、mac_key、diff 三项。"
+        )
+
+    token = data.get("access_token")
+    mac_key = data.get("mac_key")
+    if not isinstance(token, str) or not token.strip():
+        raise TokenInputError("access_token 必须是非空字符串。")
+    if not isinstance(mac_key, str) or not mac_key.strip():
+        raise TokenInputError("mac_key 必须是非空字符串。")
+    return TokenCredentials(token.strip(), mac_key, _require_int(data.get("diff"), "diff"))
 
 def parse_token_input(raw: str) -> TokenCredentials:
-    """解析设置 Token 窗口的粘贴内容：控制台脚本输出的 JSON，或单独的 Access Token。"""
+    """解析设置 Token 窗口的粘贴内容：必须是含 access_token、mac_key、diff 的 JSON；空内容表示清除。"""
     text = raw.strip()
     if not text:
         return TokenCredentials("")
 
-    if text.startswith("{"):
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            data = None
-        if isinstance(data, dict):
-            token = data.get("access_token")
-            if isinstance(token, str) and token:
-                mac_key = data.get("mac_key")
-                if not isinstance(mac_key, str) or not mac_key:
-                    mac_key = None
-                return TokenCredentials(token, mac_key, _as_int(data.get("diff")))
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        raise TokenInputError("登录凭据必须是 JSON，且包含 access_token、mac_key、diff 三项。") from None
 
-    return TokenCredentials(text)
+    # 控制台复制 JSON.stringify 结果时，有时会带上一层引号。
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except json.JSONDecodeError:
+            raise TokenInputError("登录凭据必须是 JSON，且包含 access_token、mac_key、diff 三项。") from None
+
+    if not isinstance(data, dict):
+        raise TokenInputError("登录凭据必须是包含 access_token、mac_key、diff 的 JSON 对象。")
+    return _credentials_from_mapping(data)

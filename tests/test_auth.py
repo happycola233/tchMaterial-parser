@@ -4,7 +4,9 @@ import unittest
 
 from src.tchmaterial_parser.auth import (
     TokenCredentials,
+    TokenInputError,
     build_nd_auth,
+    format_token_json,
     parse_token_input,
     sign_mac,
     signature_string,
@@ -12,19 +14,49 @@ from src.tchmaterial_parser.auth import (
 
 
 class ParseTokenInputTest(unittest.TestCase):
-    def test_reads_raw_access_token(self) -> None:
-        self.assertEqual(parse_token_input("  abc123  "), TokenCredentials("abc123"))
-
-    def test_reads_inner_json_credentials(self) -> None:
+    def test_reads_json_credentials(self) -> None:
         raw = json.dumps({ "access_token": "tok", "mac_key": "key", "diff": 227 })
         self.assertEqual(parse_token_input(raw), TokenCredentials("tok", "key", 227))
 
-    def test_ignores_json_without_access_token(self) -> None:
-        self.assertEqual(parse_token_input('{"mac_key":"key"}'), TokenCredentials('{"mac_key":"key"}'))
+    def test_reads_pretty_printed_json(self) -> None:
+        raw = format_token_json("tok", "key", 227)
+        self.assertEqual(parse_token_input(raw), TokenCredentials("tok", "key", 227))
 
-    def test_does_not_accept_nested_local_storage_blob(self) -> None:
-        raw = json.dumps({ "value": json.dumps({ "access_token": "tok", "mac_key": "key" }) })
-        self.assertEqual(parse_token_input(raw), TokenCredentials(raw))
+    def test_reads_json_string_wrapper(self) -> None:
+        inner = json.dumps({ "access_token": "tok", "mac_key": "key", "diff": 0 })
+        self.assertEqual(parse_token_input(json.dumps(inner)), TokenCredentials("tok", "key", 0))
+
+    def test_accepts_numeric_string_diff(self) -> None:
+        raw = json.dumps({ "access_token": "tok", "mac_key": "key", "diff": "227" })
+        self.assertEqual(parse_token_input(raw), TokenCredentials("tok", "key", 227))
+
+    def test_rejects_raw_access_token(self) -> None:
+        with self.assertRaises(TokenInputError):
+            parse_token_input("abc123")
+
+    def test_empty_input_clears_credentials(self) -> None:
+        self.assertEqual(parse_token_input("   "), TokenCredentials(""))
+
+    def test_rejects_json_missing_fields(self) -> None:
+        with self.assertRaises(TokenInputError):
+            parse_token_input('{"access_token":"tok","mac_key":"key"}')
+        with self.assertRaises(TokenInputError):
+            parse_token_input('{"mac_key":"key","diff":0}')
+
+    def test_rejects_empty_mac_key(self) -> None:
+        with self.assertRaises(TokenInputError):
+            parse_token_input(json.dumps({ "access_token": "tok", "mac_key": "", "diff": 0 }))
+
+    def test_rejects_nested_local_storage_blob(self) -> None:
+        raw = json.dumps({ "value": json.dumps({ "access_token": "tok", "mac_key": "key", "diff": 1 }) })
+        with self.assertRaises(TokenInputError):
+            parse_token_input(raw)
+
+    def test_format_token_json_backfills_old_fields(self) -> None:
+        self.assertEqual(
+            json.loads(format_token_json("old-token", None, 0)),
+            { "access_token": "old-token", "mac_key": "", "diff": 0 },
+        )
 
 
 class BuildNdAuthTest(unittest.TestCase):
