@@ -33,6 +33,7 @@ Thumbs.db
 Desktop.ini
 
 # Project local temp data
+.tmp/
 tmp/
 temp/
 /.devfiles
