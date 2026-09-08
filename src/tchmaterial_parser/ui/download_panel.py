@@ -15,7 +15,7 @@ from .runtime import thread_it, ui_call
 from .. import config
 from ..api import ResourceInfo, parse
 from ..bookmarks import add_bookmarks
-from ..network import request_headers, session
+from ..network import REQUEST_TIMEOUT, request_headers, session
 from ..platform_utils import print_error
 
 download_states: list[dict] = [] # 初始化下载状态
@@ -76,7 +76,12 @@ def request_download(url: str):
         while True:
             try:
                 _pace_request()
-                response = session.get(candidate_url, headers=request_headers(candidate_url), stream=True)
+                response = session.get(
+                    candidate_url,
+                    headers=request_headers(candidate_url),
+                    stream=True,
+                    timeout=REQUEST_TIMEOUT,
+                )
             except RequestException as e:
                 last_exception = e
                 break
@@ -189,8 +194,10 @@ def allocate_download_paths(resources: list[ResourceInfo], directory: str) -> li
 
     reserved_paths: set[str] = set()
     allocated_paths: list[str] = []
-    for filename in edition_filenames:
-        candidate = os.path.join(directory, filename)
+    for resource, filename in zip(resources, edition_filenames):
+        # 按资源的分类层级（学段/学科/版本）归入子目录，段名中的非法字符换为全角
+        subdirectory = os.path.join(directory, *(sanitize_filename(part) for part in resource.relative_dir))
+        candidate = os.path.join(subdirectory, filename)
         stem, extension = os.path.splitext(candidate)
         sequence = 2
 
@@ -207,104 +214,159 @@ def allocate_download_paths(resources: list[ResourceInfo], directory: str) -> li
         allocated_paths.append(candidate)
     return allocated_paths
 
-def bind_widgets(text: tk.Text, bookmark: tk.BooleanVar, button: ttk.Button, progress_bar: ttk.Progressbar, label: ttk.Label) -> None: # 由 app.py 在创建控件后写入
-    global url_text, bookmark_var, download_btn, download_progress_bar, progress_label
-    url_text, bookmark_var, download_btn, download_progress_bar, progress_label = text, bookmark, button, progress_bar, label
+def bind_widgets(text: tk.Text, bookmark: tk.BooleanVar, button: ttk.Button, copy_button: ttk.Button, progress_bar: ttk.Progressbar, label: ttk.Label) -> None: # 由 app.py 在创建控件后写入
+    global url_text, bookmark_var, download_btn, copy_btn, download_progress_bar, progress_label
+    url_text, bookmark_var, download_btn, copy_btn, download_progress_bar, progress_label = text, bookmark, button, copy_button, progress_bar, label
+
+def downloads_active() -> bool: # 是否存在尚未完成的下载任务
+    return bool(download_states) and not all(state["finished"] for state in download_states)
+
+def show_parse_progress(current: int, total: int) -> None: # 后台解析大量链接时在进度标签上反馈进度；下载进行中则让位给下载进度
+    if downloads_active():
+        return
+    ui_call(progress_label.config, text=f"正在解析链接 {current}/{total}")
+
+def refresh_download_progress() -> None: # 汇总全部任务状态刷新进度条与标签，没有 Content-Length 或出现失败时也能看到进展
+    states = list(download_states) # 下载线程会并发追加状态，先取快照避免遍历时被修改
+    all_downloaded_size = sum(state["downloaded_size"] for state in states)
+    all_total_size = sum(state["total_size"] for state in states)
+    finished_number = len([state for state in states if state["finished"]])
+    failed_number = len([state for state in states if state["failed_reason"]])
+    total_number = len(states)
+    if all_total_size > 0: # 防止下面一行代码除以 0 而报错
+        download_progress = (all_downloaded_size / all_total_size) * 100
+        ui_call(download_progress_bar.config, value=download_progress) # 更新进度条
+        progress_text = f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {finished_number}/{total_number}"
+    else:
+        progress_text = f"已下载 {format_bytes(all_downloaded_size)}，已完成 {finished_number}/{total_number} 个文件"
+    if failed_number:
+        progress_text += f"，{failed_number} 个失败"
+    ui_call(progress_label.config, text=progress_text) # 更新标签以显示当前下载进度
+
+def collect_parsed_resources(parse_fn: callable, urls: list[str], bookmarks: bool, on_progress: callable | None = None) -> tuple[list[ResourceInfo], set[str]]:
+    """逐条解析链接并汇总结果：按资源直链去重，解析失败的链接单独收集。"""
+    resources_info_list: list[ResourceInfo] = []
+    resource_urls: set[str] = set()
+    failed_urls: set[str] = set()
+    for index, url in enumerate(urls):
+        if on_progress:
+            on_progress(index + 1, len(urls))
+        resources_info = parse_fn(url, bookmarks)
+        if not resources_info:
+            failed_urls.add(url)
+            continue
+        for resource in resources_info:
+            if resource.url in resource_urls: # 直接使用 resources_info_list 会报错（list 不可哈希）
+                continue
+            resources_info_list.append(resource)
+            resource_urls.add(resource.url)
+    return resources_info_list, failed_urls
+
+def parse_urls_in_background(urls: list[str], bookmarks: bool, on_finished: callable) -> None:
+    """在后台线程逐条解析链接，完成后回到主线程执行 on_finished(资源列表, 失败链接集合)。
+
+    批量选择的链接可能多达上百条，逐条解析需多次网络请求，放在主线程会让界面未响应。
+    """
+    def worker() -> None:
+        resources_info_list, failed_urls = collect_parsed_resources(parse, urls, bookmarks, show_parse_progress)
+        ui_call(on_finished, resources_info_list, failed_urls)
+
+    thread_it(worker)
 
 def parse_and_copy() -> None: # 解析并复制链接
     urls = {line.strip() for line in url_text.get("1.0", "end").splitlines() if line.strip()} # 获取所有非空行并去重
-    resource_urls: set[str] = set()
-    failed_urls: set[str] = set()
+    if not urls:
+        return
 
-    for url in urls:
-        resources_info = parse(url, False)
-        if not resources_info:
-            failed_urls.add(url) # 添加到失败链接
-            continue
-        for resource in resources_info:
-            resource_urls.add(resource.url)
+    copy_btn.config(state="disabled") # 解析期间禁用按钮，避免重复触发
 
-    if failed_urls:
-        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls))
+    def copy_urls(resources_info_list: list[ResourceInfo], failed_urls: set[str]) -> None: # 解析完成后在主线程复制链接
+        copy_btn.config(state="normal") # 恢复按钮为启用状态
+        if not downloads_active():
+            progress_label.config(text="等待下载") # 解析进度已无用，恢复默认文案
 
-    if resource_urls:
-        try:
-            resource_urls_str = "\n".join(resource_urls)
-            url_text.clipboard_clear()
-            url_text.clipboard_append(resource_urls_str) # 将链接复制到剪贴板
-            if url_text.clipboard_get() == resource_urls_str: # 检查剪贴板内容是否正确
-                # 真实 X-ND-AUTH 必须按每条 URL 现算，不能把某一次的 nonce/mac 当作通用头复制出去。
-                messagebox.showinfo(
-                    "提示",
-                    f'资源链接已复制到剪贴板。\n注意：链接可能无法直接下载。官网私有资源使用按地址单独计算的 X-ND-AUTH，请优先用本工具下载。{"若需手动请求，至少带上以下标头（含隐私信息，请勿分享）：" if config.access_token else "未登录时可以尝试："}\n\nAuthorization: Bearer {config.access_token or "0"}\nX-ND-AUTH: MAC id="{config.access_token or "0"}",nonce="0",mac="0"',
-                )
-            else:
+        resource_urls = {resource.url for resource in resources_info_list}
+        if failed_urls:
+            messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls))
+
+        if resource_urls:
+            try:
+                resource_urls_str = "\n".join(resource_urls)
+                url_text.clipboard_clear()
+                url_text.clipboard_append(resource_urls_str) # 将链接复制到剪贴板
+                if url_text.clipboard_get() == resource_urls_str: # 检查剪贴板内容是否正确
+                    # 真实 X-ND-AUTH 必须按每条 URL 现算，不能把某一次的 nonce/mac 当作通用头复制出去。
+                    messagebox.showinfo(
+                        "提示",
+                        f'资源链接已复制到剪贴板。\n注意：链接可能无法直接下载。官网私有资源使用按地址单独计算的 X-ND-AUTH，请优先用本工具下载。{"若需手动请求，至少带上以下标头（含隐私信息，请勿分享）：" if config.access_token else "未登录时可以尝试："}\n\nAuthorization: Bearer {config.access_token or "0"}\nX-ND-AUTH: MAC id="{config.access_token or "0"}",nonce="0",mac="0"',
+                    )
+                else:
+                    messagebox.showerror("错误", "无法将链接复制到剪贴板，请手动复制。")
+            except Exception as e:
+                print_error(e)
                 messagebox.showerror("错误", "无法将链接复制到剪贴板，请手动复制。")
-        except Exception as e:
-            print_error(e)
-            messagebox.showerror("错误", "无法将链接复制到剪贴板，请手动复制。")
+
+    parse_urls_in_background(list(urls), False, copy_urls)
 
 def download() -> None: # 下载资源文件
     global download_states
     download_btn.config(state="disabled") # 设置下载按钮为禁用状态
+    download_progress_bar.config(value=0) # 重置上一批任务可能残留的进度
     download_states = [] # 初始化下载状态
     urls = {line.strip() for line in url_text.get("1.0", "end").splitlines() if line.strip()} # 获取所有非空行并去重
-    resources_info_list: list[ResourceInfo] = []
-    resource_urls: set[str] = set()
-    failed_urls: set[str] = set()
 
     if config.access_token and not config.access_token.isascii(): # 判断 Access Token 中是否包含非 ASCII 字符
         messagebox.showwarning("警告", "Access Token 不正确（包含非 ASCII 字符），请点击“设置 Token”按钮重新填写。")
         download_btn.config(state="normal") # 恢复下载按钮为启用状态
         return
 
-    for url in urls:
-        resources_info = parse(url, bookmark_var.get())
-        if not resources_info:
-            failed_urls.add(url)
-            continue
-        for resource in resources_info:
-            resource_url = resource.url
-            if resource_url in resource_urls: # 直接使用 resources_info_list 会报错（list 不可哈希）
-                continue
-            resources_info_list.append(resource)
-            resource_urls.add(resource_url)
+    if not urls:
+        download_btn.config(state="normal") # 恢复下载按钮为启用状态
+        return
 
-    if len(resources_info_list) > 1:
-        messagebox.showinfo("提示", "您将下载多个文件，请选择要下载文件的位置，本程序将在选定的文件夹中使用资源名称作为文件名进行下载。")
-        dir_path = filedialog.askdirectory() # 选择文件夹
-        if not dir_path: # 用户取消或关闭对话框
-            download_btn.config(state="normal") # 恢复下载按钮为启用状态
-            return
-        dir_path = os.path.normpath(dir_path)
-    else:
-        dir_path = None
+    def start_downloads(resources_info_list: list[ResourceInfo], failed_urls: set[str]) -> None: # 解析完成后在主线程选择保存位置并开始下载
+        def restore_download_btn() -> None: # 未产生下载任务时恢复界面状态
+            if not downloads_active():
+                progress_label.config(text="等待下载")
+            download_btn.config(state="normal") # 设置下载按钮为启用状态
 
-    if dir_path:
-        # 路径必须在任何线程启动前统一预留，否则同名资源仍可能同时打开同一个 .tmp 文件。
-        download_targets = list(zip(resources_info_list, allocate_download_paths(resources_info_list, dir_path)))
-    else:
-        download_targets: list[tuple[ResourceInfo, str]] = []
-        for resource in resources_info_list:
-            save_path = filedialog.asksaveasfilename( # 选择保存路径
-                defaultextension=f".{resource.file_format}",
-                filetypes=[(f"{resource.file_format.upper()} 文件", f"*.{resource.file_format}"), ("所有文件", "*.*")],
-                initialfile=sanitize_filename(resource.title or "download"),
-            )
-            if not save_path: # 用户取消了文件保存操作
-                download_btn.config(state="normal") # 恢复下载按钮为启用状态
+        if len(resources_info_list) > 1:
+            messagebox.showinfo("提示", "您将下载多个文件，请选择要下载文件的位置。本程序将在该文件夹中按教材分类创建子文件夹，并以资源名称命名文件。")
+            dir_path = filedialog.askdirectory() # 选择文件夹
+            if not dir_path: # 用户取消或关闭对话框
+                restore_download_btn()
                 return
-            save_path = os.path.normpath(save_path)
-            download_targets.append((resource, save_path))
+            dir_path = os.path.normpath(dir_path)
+            # 路径必须在任何线程启动前统一预留，否则同名资源仍可能同时打开同一个 .tmp 文件。
+            download_targets = list(zip(resources_info_list, allocate_download_paths(resources_info_list, dir_path)))
+        elif resources_info_list:
+            download_targets: list[tuple[ResourceInfo, str]] = []
+            for resource in resources_info_list:
+                save_path = filedialog.asksaveasfilename( # 选择保存路径
+                    defaultextension=f".{resource.file_format}",
+                    filetypes=[(f"{resource.file_format.upper()} 文件", f"*.{resource.file_format}"), ("所有文件", "*.*")],
+                    initialfile=sanitize_filename(resource.title or "download"),
+                )
+                if not save_path: # 用户取消了文件保存操作
+                    restore_download_btn()
+                    return
+                save_path = os.path.normpath(save_path)
+                download_targets.append((resource, save_path))
+        else: # 没有可下载的资源
+            restore_download_btn()
+            if failed_urls:
+                messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls)) # 显示警告对话框
+            return
 
-    for resource, save_path in download_targets:
-        thread_it(download_file, resource.url, save_path, resource.chapters) # 开始下载（多线程，防止窗口卡死）
+        for resource, save_path in download_targets:
+            thread_it(download_file, resource.url, save_path, resource.chapters) # 开始下载（多线程，防止窗口卡死）
 
-    if failed_urls:
-        messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls)) # 显示警告对话框
+        progress_label.config(text=f"正在下载 {len(download_targets)} 个文件")
 
-    if not resources_info_list:
-        download_btn.config(state="normal") # 设置下载按钮为启用状态
+        if failed_urls:
+            messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls)) # 显示警告对话框
+
+    parse_urls_in_background(list(urls), bookmark_var.get(), start_downloads)
 
 def download_file(url: str, save_path: str, chapters: list[dict] | None = None) -> None: # 下载文件
     current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None }
@@ -322,6 +384,7 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
             else:
                 current_state["total_size"] = int(response.headers.get("Content-Length", 0))
 
+                os.makedirs(os.path.dirname(save_path), exist_ok=True) # 分类下载时子目录可能尚不存在
                 with open(temp_path, "wb") as file:
                     for chunk in response.iter_content( # 分块下载
                         chunk_size=131072 if current_state["total_size"] < 20971520 else 262144 if current_state["total_size"] < 52428800 else 524288
@@ -329,15 +392,7 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
                         if chunk: # 过滤掉 Keep-Alive 块
                             file.write(chunk)
                             current_state["downloaded_size"] += len(chunk)
-                            all_downloaded_size = sum(state["downloaded_size"] for state in download_states)
-                            all_total_size = sum(state["total_size"] for state in download_states)
-                            downloaded_number = len([state for state in download_states if state["finished"]])
-                            total_number = len(download_states)
-
-                            if all_total_size > 0: # 防止下面一行代码除以 0 而报错
-                                download_progress = (all_downloaded_size / all_total_size) * 100
-                                ui_call(download_progress_bar.config, value=download_progress) # 更新进度条
-                                ui_call(progress_label.config, text=f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {downloaded_number}/{total_number}") # 更新标签以显示当前下载进度
+                            refresh_download_progress()
 
                 if current_state["total_size"] > 0 and current_state["downloaded_size"] != current_state["total_size"]: # 文件下载不完整
                     current_state["failed_reason"] = f"文件下载不完整，需下载 {current_state['total_size']} 字节，实际下载 {current_state['downloaded_size']} 字节"
@@ -368,6 +423,8 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
         if response is not None:
             response.close()
 
+    refresh_download_progress() # 每个任务结束时刷新一次，重试等待期间也能看到完成数与失败数
+
     if all(state["finished"] for state in download_states): # 所有文件下载完成
         ui_call(download_progress_bar.config, value=0) # 重置进度条
         ui_call(progress_label.config, text="等待下载") # 清空进度标签
@@ -376,7 +433,7 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
         failed_states = [state for state in download_states if state["failed_reason"]]
         if failed_states: # 存在下载失败的文件
             failed_message = "\n\n".join(
-                f"{state['download_url']}\n{state['failed_reason']}"
+                f"{os.path.basename(state['save_path'])}\n{state['failed_reason']}"
                 for state in failed_states
             )
             ui_call(

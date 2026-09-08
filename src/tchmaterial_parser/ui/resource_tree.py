@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-# 左侧资源列表：搜索筛选、封面按需加载与悬停预览
+# 左侧资源列表：勾选教材或分类、搜索筛选、封面按需加载与悬停预览
 
 import io
 import tkinter as tk
+from collections.abc import Iterator
 from tkinter import ttk
 import tkinter.font as tkfont
-from PIL import Image, ImageOps, ImageTk
+from PIL import Image, ImageDraw, ImageOps, ImageTk
 
 from . import runtime, theme
 from .runtime import scaled, thread_it, ui_call
@@ -15,17 +16,84 @@ from ..images import fit_cover_image
 from ..network import session
 from ..platform_utils import os_name, print_error
 
+def build_resource_url(item_path: str, resource_data: dict) -> str: # 根据树项路径与资源数据生成资源页面链接
+    resource_type = resource_data.get("resource_type_code") or "assets_document"
+    content_id = resource_data.get("content_id") or item_path.split(":")[-1]
+    root_id = item_path.split(":")[0]
+    if resource_type == "teachingmaterials":
+        return f"https://basic.smartedu.cn/syncClassroom{'/prepare' if root_id == '__internal_prepare_lesson' else ''}?defaultTag={'%2F'.join(item_path.split(':')[1:])}"
+    return f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={content_id}&catalogType=tchMaterial&subCatalog=tchMaterial"
+
+def iter_leaf_resources(items: dict[str, dict], parent_path: str = "") -> Iterator[tuple[str, dict]]: # 遍历分类子树，产出每个末级资源的（树项路径， 资源数据）
+    for option_id, option_data in items.items():
+        item_path = f"{parent_path}:{option_id}" if parent_path else option_id
+        children: dict[str, dict] = option_data.get("children", {})
+        if children: # 分类节点继续向下遍历
+            yield from iter_leaf_resources(children, item_path)
+        else:
+            yield item_path, option_data
+
+def collect_resource_urls(items: dict[str, dict], parent_path: str = "") -> list[str]: # 递归收集分类子树中所有末级资源的链接
+    return [build_resource_url(item_path, resource_data) for item_path, resource_data in iter_leaf_resources(items, parent_path)]
+
+def find_tree_node(items: dict[str, dict], item_path: str) -> dict | None: # 按树项路径在分类树中定位节点数据
+    node = None
+    branch = items
+    for segment in item_path.split(":"):
+        node = branch.get(segment)
+        if node is None:
+            return None
+        branch = node.get("children", {})
+    return node
+
+def category_check_state(leaf_ids: list[str], checked_items: set[str]) -> str: # 依据子树内末级资源的勾选情况得出分类的三态
+    if not leaf_ids:
+        return "unchecked"
+    checked_count = sum(1 for leaf_id in leaf_ids if leaf_id in checked_items)
+    if checked_count == 0:
+        return "unchecked"
+    return "checked" if checked_count == len(leaf_ids) else "partial"
+
+def should_check_category(leaf_ids: list[str], checked_items: set[str]) -> bool: # 点击分类时的目标状态：未全选时补全勾选，已全选时取消
+    return category_check_state(leaf_ids, checked_items) != "checked"
+
+def draw_checkbox_image(size: int, state: str, colors: dict[str, str]) -> Image.Image: # 绘制跟随主题配色的三态复选框图标
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    selected = state in ("checked", "partial")
+    border_width = max(2, size // 10)
+    draw.rounded_rectangle(
+        (border_width // 2, border_width // 2, size - 1 - border_width // 2, size - 1 - border_width // 2),
+        radius=max(2, size // 5),
+        fill=colors["selbg"] if state == "checked" else colors["surface"],
+        outline=colors["selbg"] if selected else colors["muted"],
+        width=border_width,
+    )
+    if state == "checked": # 对勾
+        draw.line(
+            (size * 0.24, size * 0.53, size * 0.44, size * 0.74, size * 0.78, size * 0.3),
+            fill=colors["selfg"],
+            width=max(2, size // 7),
+            joint="curve",
+        )
+    elif state == "partial": # 半选横线
+        inset = size * 0.32
+        draw.line((inset, size / 2, size - inset, size / 2), fill=colors["selbg"], width=max(2, size // 10))
+    return image
+
 def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_text: tk.Text) -> None: # 在给定的子框架内构建资源列表
     pane.columnconfigure(0, weight=1)
     pane.rowconfigure(2, weight=1)
 
     treeview_header = ttk.Frame(pane)
     treeview_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, scaled(6)))
-    treeview_header.columnconfigure(0, weight=1)
+    treeview_header.columnconfigure(1, weight=1)
     treeview_label = ttk.Label(treeview_header, text="资源列表", style="Heading.TLabel") # 添加树视图标签
     treeview_label.grid(row=0, column=0, sticky="w")
+    checked_count_label = ttk.Label(treeview_header, style="Caption.TLabel") # 显示当前勾选的教材数量
+    checked_count_label.grid(row=0, column=1, sticky="e", padx=(0, scaled(8)))
     search_status_label = ttk.Label(treeview_header, style="Caption.TLabel")
-    search_status_label.grid(row=0, column=1, sticky="e")
+    search_status_label.grid(row=0, column=2, sticky="e")
 
     search_frame = ttk.Frame(pane)
     search_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, scaled(8)))
@@ -40,7 +108,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
     clear_search_btn = ttk.Button(search_frame, text="清除", width=5, command=lambda: search_var.set(""))
     clear_search_btn.grid(row=0, column=2, padx=(scaled(6), 0))
 
-    treeview = ttk.Treeview(pane, style="Custom.Treeview", show="tree", selectmode="browse", height=12) # 创建树视图，使用自定义样式（该样式在 apply_theme() 中配置），隐藏列标题，设置选择模式为单选
+    treeview = ttk.Treeview(pane, style="Custom.Treeview", show="tree", selectmode="extended", height=12) # 创建树视图，使用自定义样式（该样式在 apply_theme() 中配置），隐藏列标题；勾选状态用复选框图标表达，选择模式仅供键盘导航
     treeview.column("#0", stretch=False)
     treeview.grid(row=2, column=0, sticky="nsew")
     treeview_scrollbar = ttk.Scrollbar(pane, orient="vertical", command=treeview.yview)
@@ -51,12 +119,18 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
 
     tree_item_data: dict[str, dict] = {} # 键为树项 ID，值为资源数据
     tree_item_paths: dict[str, tuple[str, ...]] = {} # 保存完整分类路径，用于悬停提示
-    tree_item_images: dict[str, ImageTk.PhotoImage] = {} # 缓存已加载的封面，筛选后继续复用
+    tree_item_images: dict[str, ImageTk.PhotoImage] = {} # 持有树项图标（复选框与封面的合成图）的引用防止被回收，筛选后继续复用
+    tree_cover_images: dict[str, Image.Image] = {} # 已加载封面的缩放图，勾选状态变化时与复选框重新合成
     tree_preview_images: dict[str, ImageTk.PhotoImage] = {} # 缓存大尺寸封面，用于悬停预览
     loading_tree_images: set[str] = set()
+    checked_items: set[str] = set() # 已勾选末级资源的树项路径，搜索重建树视图后仍保留
+    checkbox_pils: dict[str, Image.Image] = {} # 三态复选框底图，跟随主题配色重建
+    checkbox_icons: dict[str, ImageTk.PhotoImage] = {} # 无封面树项直接使用的复选框图标（已含右侧间距）
     tree_font = tkfont.nametofont("AppBodyFont")
     tree_cover_size = (scaled(26), scaled(28))
     tree_cover_gap = scaled(8) # 用透明区域拉开封面与标题，避免改变封面尺寸
+    checkbox_size = scaled(18)
+    checkbox_gap = scaled(6) # 复选框与封面、标题之间的间距
     preview_cover_size = (scaled(80), scaled(112))
     tree_content_width = 0
 
@@ -76,7 +150,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
                 "end",
                 iid=item_id,
                 text=display_name,
-                image=tree_item_images.get(item_id, ""),
+                image=compose_item_image(item_id),
                 open=expand_all or not parent,
             )
             children: dict[str, dict] = option_data.get("children", {})
@@ -84,24 +158,67 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
                 build_tree_items(item_id, children, path_names, expand_all)
 
             depth_width = len(path_names) * scaled(20)
-            image_width = tree_cover_size[0] + get_tree_cover_gap(display_name) + scaled(4) if option_data.get("custom_properties", {}).get("thumbnails") else 0
+            if option_data.get("custom_properties", {}).get("thumbnails"):
+                image_width = checkbox_size + checkbox_gap + tree_cover_size[0] + get_tree_cover_gap(display_name) + scaled(4)
+            else:
+                image_width = checkbox_size + checkbox_gap
             tree_content_width = max(tree_content_width, depth_width + image_width + tree_font.measure(display_name) + scaled(20))
 
     def resize_tree_column(width: int) -> None: # 让树列至少铺满可视区域，内容过长时启用横向滚动
         treeview.column("#0", width=max(tree_content_width, width - scaled(2)))
 
+    def rebuild_checkbox_images() -> None: # 按当前主题配色生成三态复选框图标
+        checkbox_pils.clear()
+        checkbox_icons.clear()
+        for state in ("checked", "partial", "unchecked"):
+            checkbox_pils[state] = draw_checkbox_image(checkbox_size, state, theme.current_colors)
+            checkbox_icons[state] = ImageTk.PhotoImage(ImageOps.expand(checkbox_pils[state], border=(0, 0, checkbox_gap, 0), fill=(0, 0, 0, 0)))
+
+    def on_theme_changed() -> None: # 主题切换后重建复选框配色并刷新全部树项图标
+        rebuild_checkbox_images()
+        for item_id in list(tree_item_data):
+            refresh_item_image(item_id)
+
+    def item_check_state(item_id: str) -> str: # 末级资源为勾选/未勾选两态，分类按后代整体勾选情况显示三态
+        node = find_tree_node(resource_list, item_id)
+        if node is None:
+            return "unchecked"
+        children = node.get("children")
+        if children:
+            leaf_ids = [leaf_id for leaf_id, _leaf_data in iter_leaf_resources(children, item_id)]
+            return category_check_state(leaf_ids, checked_items)
+        return "checked" if item_id in checked_items else "unchecked"
+
+    def compose_item_image(item_id: str) -> ImageTk.PhotoImage: # 合成树项图标：勾选状态对应的复选框与已加载的封面
+        state = item_check_state(item_id)
+        cover = tree_cover_images.get(item_id)
+        if cover is None: # 尚未加载封面的树项直接复用带间距的复选框图标
+            return checkbox_icons[state]
+        checkbox = checkbox_pils[state]
+        height = max(checkbox.height, cover.height)
+        image = Image.new("RGBA", (checkbox.width + checkbox_gap + cover.width, height), (0, 0, 0, 0))
+        image.paste(checkbox, (0, (height - checkbox.height) // 2), checkbox)
+        image.paste(cover, (checkbox.width + checkbox_gap, (height - cover.height) // 2), cover)
+        return ImageTk.PhotoImage(image)
+
+    def refresh_item_image(item_id: str) -> None: # 重新合成并应用树项图标（勾选状态或封面变化后调用）
+        image = compose_item_image(item_id)
+        tree_item_images[item_id] = image
+        if treeview.exists(item_id):
+            treeview.item(item_id, image=image)
+
     def apply_tree_icon(item_id: str, image: Image.Image | None) -> None:
         loading_tree_images.discard(item_id)
-        if image is None:
-            return
-        tree_image = fit_cover_image(image, tree_cover_size)
-        cover_gap = get_tree_cover_gap(tree_item_data[item_id]["display_name"])
-        if cover_gap:
-            tree_image = ImageOps.expand(tree_image, border=(0, 0, cover_gap, 0), fill=(0, 0, 0, 0))
-        tree_item_images[item_id] = ImageTk.PhotoImage(tree_image)
-        tree_preview_images[item_id] = ImageTk.PhotoImage(image)
-        if treeview.exists(item_id):
-            treeview.item(item_id, image=tree_item_images[item_id])
+        if image is not None:
+            tree_image = fit_cover_image(image, tree_cover_size)
+            # 搜索重建后树项可能暂不在当前视图中，仍缓存封面供下次合成复用
+            resource_data = tree_item_data.get(item_id) or find_tree_node(resource_list, item_id) or {}
+            cover_gap = get_tree_cover_gap(resource_data.get("display_name", ""))
+            if cover_gap:
+                tree_image = ImageOps.expand(tree_image, border=(0, 0, cover_gap, 0), fill=(0, 0, 0, 0))
+            tree_cover_images[item_id] = tree_image
+            tree_preview_images[item_id] = ImageTk.PhotoImage(image)
+        refresh_item_image(item_id)
 
     def load_tree_icon(item_id: str, url: str) -> None: # 在线程中下载封面，在主线程中更新控件
         try:
@@ -118,7 +235,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
     def queue_tree_icon(item_id: str) -> None:
         resource_data = tree_item_data[item_id]
         thumbnails = resource_data.get("custom_properties", {}).get("thumbnails")
-        if thumbnails and item_id not in tree_item_images and item_id not in loading_tree_images:
+        if thumbnails and item_id not in tree_cover_images and item_id not in loading_tree_images:
             loading_tree_images.add(item_id)
             thread_it(load_tree_icon, item_id, thumbnails[0])
 
@@ -149,37 +266,92 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
         clear_search_btn.state(["!disabled"] if query else ["disabled"])
         ui_call(load_visible_tree_icons)
 
-    def on_tree_select(event: tk.Event) -> None: # 处理树视图选择事件
-        selection = treeview.selection()
-        if not selection:
+    def insert_resource_urls(urls: list[str]) -> None: # 将链接追加到 URL 输入框，跳过已存在的行
+        existing_lines = set(url_text.get("1.0", "end").splitlines())
+        new_urls = [url for url in dict.fromkeys(urls) if url and url not in existing_lines] # 保序去重，并跳过已存在的链接
+        if not new_urls:
             return
 
-        item = selection[0]
-        children = treeview.get_children(item)
-        if children: # 如果选中的项有子项，则加载子项的预览图，否则插入 URL
-            for child in children: # 遍历子项，设置子项的图片
-                queue_tree_icon(child)
+        url_text_content = url_text.get("1.0", "end")[:-1] # 获取 URL 输入框的内容，去掉最后一个换行符
+        # URL 输入框为空或最后一个字符为换行符时，插入的内容前面不加换行
+        prefix = "" if not url_text_content or url_text_content[-1] == "\n" else "\n"
+        url_text.insert("end", prefix + "\n".join(new_urls))
+        url_text.see("end") # 滚动到文本框底部
+
+    def remove_resource_urls(urls: list[str]) -> None: # 从 URL 输入框移除已取消勾选资源的链接行
+        if not urls:
+            return
+        url_set = set(urls)
+        lines = url_text.get("1.0", "end").splitlines()
+        kept_lines = [line for line in lines if line not in url_set]
+        if len(kept_lines) == len(lines):
+            return
+        url_text.delete("1.0", "end")
+        if kept_lines:
+            url_text.insert("1.0", "\n".join(kept_lines))
+
+    def update_checked_count() -> None: # 更新已勾选教材数量提示
+        checked_count_label.config(text=f"已选 {len(checked_items)} 项" if checked_items else "")
+
+    def toggle_item(item_id: str) -> None: # 切换树项勾选状态：分类按三态决定目标状态并级联其下所有末级资源
+        node = find_tree_node(resource_list, item_id)
+        if node is None:
+            return
+        children = node.get("children")
+        if children:
+            leafs = list(iter_leaf_resources(children, item_id))
+            checked = should_check_category([leaf_id for leaf_id, _leaf_data in leafs], checked_items)
         else:
-            resource_data = tree_item_data.get(item)
-            if not resource_data:
-                return
+            leafs = [(item_id, node)]
+            checked = item_id not in checked_items
+        set_items_checked(leafs, checked)
 
-            resource_type = resource_data.get("resource_type_code") or "assets_document"
-            content_id = resource_data.get("content_id") or item.split(":")[-1]
-            root_id = item.split(":")[0]
-            if resource_type == "teachingmaterials":
-                url = f"https://basic.smartedu.cn/syncClassroom{'/prepare' if root_id == '__internal_prepare_lesson' else ''}?defaultTag={'%2F'.join(item.split(':')[1:])}"
+    def set_items_checked(leafs: list[tuple[str, dict]], checked: bool) -> None: # 批量更新末级资源勾选状态，级联刷新图标并同步 URL 输入框
+        changed_leafs: list[tuple[str, dict]] = []
+        for leaf_id, leaf_data in leafs:
+            if checked == (leaf_id in checked_items):
+                continue
+            if checked:
+                checked_items.add(leaf_id)
             else:
-                url = f"https://basic.smartedu.cn/tchMaterial/detail?contentType={resource_type}&contentId={content_id}&catalogType=tchMaterial&subCatalog=tchMaterial"
+                checked_items.discard(leaf_id)
+            changed_leafs.append((leaf_id, leaf_data))
+        if not changed_leafs:
+            return
 
-            url_text_content = url_text.get("1.0", "end")[:-1] # 获取 URL 输入框的内容，去掉最后一个换行符
-            if url in url_text_content.splitlines(): # 如果 URL 已经存在于输入框中，则不再插入
-                return
-            if not url_text_content or url_text_content[-1] == "\n": # URL 输入框为空或最后一个字符为换行符时，插入的内容前面不加换行
-                url_text.insert("end", url)
-            else:
-                url_text.insert("end", f"\n{url}")
-            url_text.see("end") # 滚动到文本框底部
+        refresh_ids: set[str] = set() # 状态变化的末级资源及其各级祖先分类都需要刷新图标
+        for leaf_id, _leaf_data in changed_leafs:
+            segments = leaf_id.split(":")
+            refresh_ids.update(":".join(segments[:index]) for index in range(1, len(segments) + 1))
+        for refresh_id in refresh_ids:
+            if refresh_id in tree_item_data:
+                refresh_item_image(refresh_id)
+
+        urls = [build_resource_url(leaf_id, leaf_data) for leaf_id, leaf_data in changed_leafs]
+        if checked:
+            insert_resource_urls(urls)
+        else:
+            remove_resource_urls(urls)
+        update_checked_count()
+
+    def on_tree_press(event: tk.Event) -> str | None: # 按下鼠标时隐藏悬停提示；左键点击标题或封面（含复选框）时切换勾选，点击箭头或缩进保持展开收起
+        hide_tree_tooltip()
+        if event.num != 1 or treeview.identify("element", event.x, event.y) not in ("text", "image"):
+            return None
+        item_id = treeview.identify_row(event.y)
+        if not item_id:
+            return None
+        treeview.focus_set() # 确保随后可以直接用方向键与空格操作
+        treeview.selection_set(item_id)
+        treeview.focus(item_id)
+        toggle_item(item_id)
+        return "break"
+
+    def on_tree_space(_event: tk.Event) -> str: # 空格键切换当前焦点树项的勾选状态
+        item_id = treeview.focus()
+        if item_id:
+            toggle_item(item_id)
+        return "break"
 
     tooltip_window: tk.Toplevel | None = None
     tooltip_after_id: str | None = None
@@ -294,15 +466,18 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
         delta_unit = 1 if os_name == "Darwin" else 120
         return scroll_tree_horizontally(-event.delta / delta_unit)
 
+    rebuild_checkbox_images() # 构建树项前先生成三态复选框图标
+    theme.on_theme_applied(on_theme_changed) # 主题切换后重建复选框配色并刷新树项图标
+    update_checked_count()
     refresh_resource_tree() # 初始展示完整资源树并展开一级目录
     search_var.trace_add("write", schedule_search)
     treeview.configure(yscrollcommand=on_tree_view_change)
-    treeview.bind("<<TreeviewSelect>>", on_tree_select)
+    treeview.bind("<space>", on_tree_space)
     treeview.bind("<<TreeviewOpen>>", lambda _event: ui_call(load_visible_tree_icons))
     treeview.bind("<Configure>", lambda event: resize_tree_column(event.width))
     treeview.bind("<Motion>", on_tree_motion)
     treeview.bind("<Leave>", lambda _event: leave_tree())
-    treeview.bind("<ButtonPress>", lambda _event: hide_tree_tooltip())
+    treeview.bind("<ButtonPress>", on_tree_press)
     treeview.bind("<Shift-MouseWheel>", on_tree_shift_mousewheel)
     treeview.bind("<Shift-Button-4>", lambda _event: scroll_tree_horizontally(-1))
     treeview.bind("<Shift-Button-5>", lambda _event: scroll_tree_horizontally(1))

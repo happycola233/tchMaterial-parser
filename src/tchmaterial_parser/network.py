@@ -11,6 +11,8 @@ import requests
 session = requests.Session() # 初始化请求
 session.trust_env = False # 不读取系统或环境变量中的代理配置
 
+REQUEST_TIMEOUT = (10, 60) # 连接 / 相邻两次收数据的超时秒数；requests 没有全局默认超时，缺失时卡住的请求会永久挂起
+
 headers = { # 设置请求头部，包含认证信息
     "Authorization": "Bearer 0",
     "Origin": "https://basic.smartedu.cn",
