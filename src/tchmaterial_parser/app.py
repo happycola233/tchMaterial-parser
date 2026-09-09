@@ -281,7 +281,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
     copy_btn.pack(side="right", padx=(0, scaled(8)))
 
     # 下载相关的控件全部就位后，写入下载面板模块，供其中的解析与下载流程使用
-    download_panel.bind_widgets(url_text, bookmark_var, download_btn, download_progress_bar, progress_label)
+    download_panel.bind_widgets(url_text, bookmark_var, download_btn, copy_btn, download_progress_bar, progress_label)
 
     # 最后打包内容区，使其占据剩余的全部空间
     paned.pack(side="top", fill="both", expand=True, pady=(scaled(14), 0))

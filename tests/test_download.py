@@ -56,7 +56,7 @@ class DownloadFailureTest(unittest.TestCase):
         self.addCleanup(setattr, download_panel, "_MIN_REQUEST_INTERVAL", previous_interval)
         download_panel._MIN_REQUEST_INTERVAL = 0
         widget = FakeWidget()
-        download_panel.bind_widgets(widget, widget, widget, widget, widget)
+        download_panel.bind_widgets(widget, widget, widget, widget, widget, widget)
 
     def failure_reason(self, status_code: int) -> str:
         download_panel.session = FakeSession(status_code)

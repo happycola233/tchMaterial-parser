@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from src.tchmaterial_parser.api import ResourceInfo
+from src.tchmaterial_parser.api import ResourceInfo, get_relative_dir
 from src.tchmaterial_parser.ui.download_panel import (
     allocate_download_paths,
     download_filename,
@@ -15,6 +15,7 @@ def resource(
     resource_key: str,
     edition: str | None = None,
     file_format: str = "pdf",
+    relative_dir: tuple[str, ...] = (),
 ) -> ResourceInfo:
     return ResourceInfo(
         title=title,
@@ -22,6 +23,7 @@ def resource(
         file_format=file_format,
         chapters=[],
         edition=edition,
+        relative_dir=relative_dir,
     )
 
 
@@ -80,6 +82,41 @@ class DownloadPathTest(unittest.TestCase):
 
         self.assertEqual([os.path.basename(path) for path in paths], ["已有教材 (2).pdf", "未完成教材 (2).pdf"])
 
+    def test_places_files_into_category_subdirectories(self) -> None:
+        resources = [
+            resource("必修上册", "book-1", relative_dir=("高中", "语文", "统编版")),
+            resource("必修上册", "book-2", relative_dir=("高中", "语文", "人教版")),
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            paths = allocate_download_paths(resources, directory)
+
+            self.assertEqual(paths, [
+                os.path.join(directory, "高中", "语文", "统编版", "必修上册.pdf"),
+                os.path.join(directory, "高中", "语文", "人教版", "必修上册.pdf"),
+            ])
+
+    def test_same_title_in_different_categories_needs_no_sequence(self) -> None:
+        resources = [
+            resource("必修上册", "book-1", relative_dir=("高中", "语文")),
+            resource("必修上册", "book-2", relative_dir=("初中", "语文")),
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            paths = allocate_download_paths(resources, directory)
+
+            self.assertEqual([os.path.basename(path) for path in paths], ["必修上册.pdf", "必修上册.pdf"])
+
+    def test_sanitizes_category_directory_names(self) -> None:
+        resources = [
+            resource("教材", "book-1", relative_dir=("特殊:学段", "语*文")),
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            paths = allocate_download_paths(resources, directory)
+
+            self.assertEqual(paths, [os.path.join(directory, "特殊：学段", "语＊文", "教材.pdf")])
+
     def test_issue_86_replaces_windows_illegal_filename_characters(self) -> None:
         resources = [
             resource(
@@ -134,6 +171,37 @@ class DownloadPathTest(unittest.TestCase):
             "同名教材？.pdf",
             "同名教材？ (2).pdf",
         ])
+
+
+class GetRelativeDirTest(unittest.TestCase):
+    @staticmethod
+    def tag(dimension: str, name: str, order: int = 0) -> dict:
+        return {"tag_dimension_id": dimension, "tag_name": name, "order_num": order}
+
+    def test_builds_dir_in_stage_subject_edition_order(self) -> None:
+        data = {"tag_list": [
+            self.tag("zxxnj", "一年级"),
+            self.tag("zxxbb", "统编版"),
+            self.tag("zxxxd", "小学"),
+            self.tag("zxxxk", "道德与法治"),
+            self.tag("tagView", "教材"),
+        ]}
+
+        self.assertEqual(get_relative_dir(data), ("小学", "道德与法治", "统编版"))
+
+    def test_skips_missing_dimensions(self) -> None:
+        data = {"tag_list": [self.tag("zxxxd", "高中"), self.tag("zxxxk", "语文")]}
+
+        self.assertEqual(get_relative_dir(data), ("高中", "语文"))
+
+    def test_returns_empty_dir_without_tag_list(self) -> None:
+        self.assertEqual(get_relative_dir({}), ())
+        self.assertEqual(get_relative_dir({"tag_list": []}), ())
+
+    def test_ignores_other_dimensions_and_blank_names(self) -> None:
+        data = {"tag_list": [self.tag("zxxcc", "上册"), self.tag("zxxbb", ""), self.tag("5036342742", "电子教材")]}
+
+        self.assertEqual(get_relative_dir(data), ())
 
 
 class SanitizeFilenameTest(unittest.TestCase):

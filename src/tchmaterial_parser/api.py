@@ -5,7 +5,7 @@ import re
 from typing import NamedTuple
 from urllib.parse import urlparse, parse_qs
 
-from .network import headers, request_headers, session
+from .network import REQUEST_TIMEOUT, headers, request_headers, session
 from .platform_utils import print_error
 
 class ResourceInfo(NamedTuple):
@@ -14,6 +14,7 @@ class ResourceInfo(NamedTuple):
     file_format: str
     chapters: list[dict]
     edition: str | None = None
+    relative_dir: tuple[str, ...] = () # 按资源树层级（学段/学科/版本）分类存放的子目录
 
 def get_edition_name(resource_data: dict) -> str | None:
     """读取资源分类中的教材版别，例如 “人教版”“北师大版”。"""
@@ -21,6 +22,17 @@ def get_edition_name(resource_data: dict) -> str | None:
         if tag.get("tag_dimension_id") == "zxxbb" and tag.get("tag_name"):
             return tag["tag_name"]
     return None
+
+TAG_DIMENSIONS = ("zxxxd", "zxxxk", "zxxbb") # 学段、学科、版本，与资源树的分类层级一致
+
+def get_relative_dir(resource_data: dict) -> tuple[str, ...]:
+    """按资源树层级从 tag_list 提取分类目录（学段/学科/版本），供批量下载时分类存放。"""
+    names: dict[str, str] = {}
+    for tag in resource_data.get("tag_list") or []:
+        dimension = tag.get("tag_dimension_id")
+        if dimension in TAG_DIMENSIONS and tag.get("tag_name") and dimension not in names:
+            names[dimension] = tag["tag_name"]
+    return tuple(names[dimension] for dimension in TAG_DIMENSIONS if dimension in names)
 
 def combine_resource_title(root_title: str | None, resource_title: str) -> str:
     """组合专题标题与实际资源标题，并避免平台重复标题造成超长文件名。"""
@@ -128,6 +140,7 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
 
         data: dict = response.json()
         root_edition = get_edition_name(data)
+        root_dir = get_relative_dir(data)
 
         # 3. 获取资源标题、下载链接及章节目录
         def get_resource_info(resource_data: dict, root_title: str | None = None, edition: str | None = None) -> ResourceInfo | None:
@@ -192,7 +205,11 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
                     if mapping_url:
                         # a. 下载 mapping 文件获取页码和 ebook_id。
                         # mapping 也在 ndr-private 上，必须按 URL 现算 X-ND-AUTH，不能用全局占位头。
-                        map_resp = session.get(mapping_url, headers=request_headers(mapping_url))
+                        map_resp = session.get(
+                            mapping_url,
+                            headers=request_headers(mapping_url),
+                            timeout=REQUEST_TIMEOUT,
+                        )
                         map_data: dict = map_resp.json()
                         ebook_id: str = map_data.get("ebook_id")
 
@@ -251,6 +268,7 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
                 resource_format,
                 chapters,
                 edition or get_edition_name(resource_data),
+                get_relative_dir(resource_data) or root_dir,
             )
 
         def get_audio_info(audio_data: dict, root_title: str | None = None, edition: str | None = None) -> ResourceInfo | None: # 解析教材关联的音频资源（如英语教材听力）
@@ -284,6 +302,7 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
                 resource_format,
                 [],
                 edition or get_edition_name(audio_data),
+                get_relative_dir(audio_data) or root_dir,
             )
 
         if content_type == "thematic_course": # 专题课程
