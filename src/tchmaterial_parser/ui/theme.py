@@ -3,6 +3,7 @@
 
 import subprocess
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
 import tkinter.font as tkfont
 from typing import Literal
@@ -16,9 +17,9 @@ switched_theme = "system" # 选择的主题
 current_theme = "light" # 当前主题，若 switched_theme 为 `system` 则 current_theme 为系统主题（`light` 或 `dark`）
 current_colors: dict[str, str] = {} # 当前主题的配色，在 apply_theme() 中填充
 themed_widgets: set[tk.Widget] = set() # 当前仍存在且需要跟随主题调整配色的 tk 原生控件
-theme_actions: list[callable] = [] # 主题应用后需要额外执行的回调（如重建跟随主题的图片资源）
+theme_actions: list[Callable[[], None]] = [] # 主题应用后需要额外执行的回调（如重建跟随主题的图片资源）
 
-def on_theme_applied(action: callable) -> None: # 登记回调，在每次 apply_theme() 末尾执行
+def on_theme_applied(action: Callable[[], None]) -> None: # 登记回调，在每次 apply_theme() 末尾执行
     theme_actions.append(action)
 
 # 主题配色，surface 为 sv-ttk 卡片贴图的填充色，须与之一致，否则卡片内会出现色差；

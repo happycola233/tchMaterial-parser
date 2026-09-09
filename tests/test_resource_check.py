@@ -1,6 +1,6 @@
 import unittest
 
-from PIL import Image
+from PIL import Image, ImageColor
 
 from src.tchmaterial_parser.ui.resource_tree import (
     category_check_state,
@@ -127,6 +127,31 @@ class DrawCheckboxImageTest(unittest.TestCase):
                 self.assertEqual(image.mode, "RGBA")
                 # 中心区域被复选框底色填充（不透明）
                 self.assertEqual(image.getpixel((9, 9))[3], 255)
+
+    def test_edges_are_antialiased_in_both_themes_at_common_scales(self) -> None:
+        for theme_name, colors in THEME_COLORS.items():
+            for size in (18, 23, 27, 36):
+                for state in ("checked", "partial", "unchecked"):
+                    with self.subTest(theme=theme_name, size=size, state=state):
+                        image = draw_checkbox_image(size, state, colors)
+
+                        self.assertEqual(image.size, (size, size))
+                        self.assertEqual(image.getpixel((0, 0))[3], 0)
+                        self.assertGreater(sum(image.getchannel("A").histogram()[1:255]), 0)
+
+    def test_checkmark_has_smooth_color_transitions(self) -> None:
+        for theme_name, colors in THEME_COLORS.items():
+            with self.subTest(theme=theme_name):
+                image = draw_checkbox_image(27, "checked", colors)
+                background = ImageColor.getrgb(colors["selbg"])
+                foreground = ImageColor.getrgb(colors["selfg"])
+                # 检查内部对勾的颜色过渡，避免仅外框抗锯齿而对勾仍有锯齿。
+                interior = image.crop((6, 6, 21, 21))
+                pixels = (interior.getpixel((x, y)) for y in range(interior.height) for x in range(interior.width))
+                self.assertTrue(any(
+                    alpha == 255 and all(low < channel < high for channel, low, high in zip((r, g, b), background, foreground))
+                    for r, g, b, alpha in pixels
+                ))
 
 
 if __name__ == "__main__":

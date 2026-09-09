@@ -1,7 +1,8 @@
 import unittest
+from typing import get_type_hints
 
 from src.tchmaterial_parser.api import ResourceInfo
-from src.tchmaterial_parser.ui.download_panel import collect_parsed_resources
+from src.tchmaterial_parser.ui.download_panel import collect_parsed_resources, parse_urls_in_background
 
 
 def make_resource(url: str, title: str = "资源") -> ResourceInfo:
@@ -9,6 +10,11 @@ def make_resource(url: str, title: str = "资源") -> ResourceInfo:
 
 
 class CollectParsedResourcesTest(unittest.TestCase):
+    def test_callback_annotations_can_be_evaluated(self) -> None:
+        # Python 3.14 延迟求值注解；显式求值以免启动错误被新版解释器掩盖。
+        get_type_hints(collect_parsed_resources)
+        get_type_hints(parse_urls_in_background)
+
     def test_flattens_multiple_resources_per_url(self) -> None:
         def fake_parse(url: str, bookmarks: bool):
             return [make_resource("https://example.com/a.pdf"), make_resource("https://example.com/b.mp3")]

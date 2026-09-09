@@ -58,13 +58,19 @@ def should_check_category(leaf_ids: list[str], checked_items: set[str]) -> bool:
     return category_check_state(leaf_ids, checked_items) != "checked"
 
 def draw_checkbox_image(size: int, state: str, colors: dict[str, str]) -> Image.Image: # 绘制跟随主题配色的三态复选框图标
+    # 放大绘制后缩回目标尺寸，让圆角、对勾与半选横线的边缘抗锯齿。
+    scale = 4
+    target_size = size
+    border_width = max(2, size // 10) * scale
+    corner_radius = max(2, size // 5) * scale
+    check_width = max(2, size // 7) * scale
+    size *= scale
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     selected = state in ("checked", "partial")
-    border_width = max(2, size // 10)
     draw.rounded_rectangle(
         (border_width // 2, border_width // 2, size - 1 - border_width // 2, size - 1 - border_width // 2),
-        radius=max(2, size // 5),
+        radius=corner_radius,
         fill=colors["selbg"] if state == "checked" else colors["surface"],
         outline=colors["selbg"] if selected else colors["muted"],
         width=border_width,
@@ -73,13 +79,13 @@ def draw_checkbox_image(size: int, state: str, colors: dict[str, str]) -> Image.
         draw.line(
             (size * 0.24, size * 0.53, size * 0.44, size * 0.74, size * 0.78, size * 0.3),
             fill=colors["selfg"],
-            width=max(2, size // 7),
+            width=check_width,
             joint="curve",
         )
     elif state == "partial": # 半选横线
         inset = size * 0.32
-        draw.line((inset, size / 2, size - inset, size / 2), fill=colors["selbg"], width=max(2, size // 10))
-    return image
+        draw.line((inset, size / 2, size - inset, size / 2), fill=colors["selbg"], width=border_width)
+    return image.resize((target_size, target_size), Image.Resampling.LANCZOS)
 
 def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_text: tk.Text) -> None: # 在给定的子框架内构建资源列表
     pane.columnconfigure(0, weight=1)
@@ -197,8 +203,8 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
         checkbox = checkbox_pils[state]
         height = max(checkbox.height, cover.height)
         image = Image.new("RGBA", (checkbox.width + checkbox_gap + cover.width, height), (0, 0, 0, 0))
-        image.paste(checkbox, (0, (height - checkbox.height) // 2), checkbox)
-        image.paste(cover, (checkbox.width + checkbox_gap, (height - cover.height) // 2), cover)
+        image.alpha_composite(checkbox, (0, (height - checkbox.height) // 2))
+        image.alpha_composite(cover, (checkbox.width + checkbox_gap, (height - cover.height) // 2))
         return ImageTk.PhotoImage(image)
 
     def refresh_item_image(item_id: str) -> None: # 重新合成并应用树项图标（勾选状态或封面变化后调用）

@@ -5,6 +5,7 @@
 import os, re, threading, time, traceback
 import tkinter as tk
 from collections import Counter
+from collections.abc import Callable
 from tkinter import ttk, messagebox, filedialog
 from urllib.parse import urlsplit, urlunsplit
 from xml.etree import ElementTree
@@ -243,7 +244,12 @@ def refresh_download_progress() -> None: # 汇总全部任务状态刷新进度�
         progress_text += f"，{failed_number} 个失败"
     ui_call(progress_label.config, text=progress_text) # 更新标签以显示当前下载进度
 
-def collect_parsed_resources(parse_fn: callable, urls: list[str], bookmarks: bool, on_progress: callable | None = None) -> tuple[list[ResourceInfo], set[str]]:
+def collect_parsed_resources(
+    parse_fn: Callable[[str, bool], list[ResourceInfo] | None],
+    urls: list[str],
+    bookmarks: bool,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> tuple[list[ResourceInfo], set[str]]:
     """逐条解析链接并汇总结果：按资源直链去重，解析失败的链接单独收集。"""
     resources_info_list: list[ResourceInfo] = []
     resource_urls: set[str] = set()
@@ -262,7 +268,11 @@ def collect_parsed_resources(parse_fn: callable, urls: list[str], bookmarks: boo
             resource_urls.add(resource.url)
     return resources_info_list, failed_urls
 
-def parse_urls_in_background(urls: list[str], bookmarks: bool, on_finished: callable) -> None:
+def parse_urls_in_background(
+    urls: list[str],
+    bookmarks: bool,
+    on_finished: Callable[[list[ResourceInfo], set[str]], None],
+) -> None:
     """在后台线程逐条解析链接，完成后回到主线程执行 on_finished(资源列表, 失败链接集合)。
 
     批量选择的链接可能多达上百条，逐条解析需多次网络请求，放在主线程会让界面未响应。
