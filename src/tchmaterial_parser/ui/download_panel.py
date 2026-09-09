@@ -6,6 +6,7 @@ import os, re, threading, time, traceback
 import tkinter as tk
 from collections import Counter
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from tkinter import ttk, messagebox, filedialog
 from urllib.parse import urlsplit, urlunsplit
 from xml.etree import ElementTree
@@ -228,7 +229,7 @@ def show_parse_progress(current: int, total: int) -> None: # 后台解析大量�
     ui_call(progress_label.config, text=f"正在解析链接 {current}/{total}")
 
 def refresh_download_progress() -> None: # 汇总全部任务状态刷新进度条与标签，没有 Content-Length 或出现失败时也能看到进展
-    states = list(download_states) # 下载线程会并发追加状态，先取快照避免遍历时被修改
+    states = list(download_states)
     all_downloaded_size = sum(state["downloaded_size"] for state in states)
     all_total_size = sum(state["total_size"] for state in states)
     finished_number = len([state for state in states if state["finished"]])
@@ -368,19 +369,56 @@ def download() -> None: # 下载资源文件
                 messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls)) # 显示警告对话框
             return
 
-        for resource, save_path in download_targets:
-            thread_it(download_file, resource.url, save_path, resource.chapters) # 开始下载（多线程，防止窗口卡死）
-
         progress_label.config(text=f"正在下载 {len(download_targets)} 个文件")
+        directory = dir_path if len(resources_info_list) > 1 else os.path.dirname(download_targets[0][1])
+        start_download_batch(download_targets, directory)
 
         if failed_urls:
             messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls)) # 显示警告对话框
 
     parse_urls_in_background(list(urls), bookmark_var.get(), start_downloads)
 
-def download_file(url: str, save_path: str, chapters: list[dict] | None = None) -> None: # 下载文件
-    current_state = { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None }
-    download_states.append(current_state)
+def create_download_state(url: str, save_path: str) -> dict:
+    return { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None }
+
+def start_download_batch(targets: list[tuple[ResourceInfo, str]], directory: str) -> None:
+    global download_states
+    # 所有排队任务先登记，快速失败或完成的线程也不会漏算尚未启动的任务。
+    states = [create_download_state(resource.url, save_path) for resource, save_path in targets]
+    download_states = states
+
+    def worker() -> None:
+        # 批量勾选可能产生数千个文件，仅保留少量工作线程，其余任务排队。
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [
+                executor.submit(download_file, resource.url, save_path, resource.chapters, state)
+                for (resource, save_path), state in zip(targets, states)
+            ]
+            for future in futures:
+                future.result()
+        ui_call(finish_download_batch, states, directory) # 全部线程退出后，仅由批次通知一次
+
+    thread_it(worker)
+
+def finish_download_batch(states: list[dict], directory: str) -> None: # 在主线程统一恢复控件并显示整批结果
+    download_progress_bar.config(value=0)
+    progress_label.config(text="等待下载")
+    download_btn.config(state="normal")
+
+    failed_states = [state for state in states if state["failed_reason"]]
+    if failed_states:
+        failed_message = "\n\n".join(
+            f"{os.path.relpath(state['save_path'], directory)}\n{state['failed_reason']}"
+            for state in failed_states
+        )
+        messagebox.showwarning("下载完成", f"文件已下载到：{directory}\n以下文件下载失败：\n{failed_message}")
+    else:
+        messagebox.showinfo("下载完成", f"文件已下载到：{directory}")
+
+def download_file(url: str, save_path: str, chapters: list[dict] | None = None, current_state: dict | None = None) -> None: # 下载文件
+    if current_state is None: # 保留单独下载文件的调用方式
+        current_state = create_download_state(url, save_path)
+        download_states.append(current_state)
     temp_path = f"{save_path}.tmp"
 
     response = None
@@ -389,7 +427,6 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
             response, attempted_urls = request_download(url)
 
             if not response.ok: # 服务器返回表示错误的 HTTP 状态码
-                current_state["finished"] = True
                 current_state["failed_reason"] = download_failure_reason(response, attempted_urls)
             else:
                 current_state["total_size"] = int(response.headers.get("Content-Length", 0))
@@ -407,7 +444,6 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
                 if current_state["total_size"] > 0 and current_state["downloaded_size"] != current_state["total_size"]: # 文件下载不完整
                     current_state["failed_reason"] = f"文件下载不完整，需下载 {current_state['total_size']} 字节，实际下载 {current_state['downloaded_size']} 字节"
                     current_state["downloaded_size"], current_state["total_size"] = 0, 0
-                    current_state["finished"] = True
                     try:
                         os.remove(temp_path)
                     except Exception:
@@ -418,12 +454,10 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
                         add_bookmarks(temp_path, chapters)
 
                     os.replace(temp_path, save_path) # 重命名临时文件为目标文件
-                    current_state["finished"] = True
 
     except Exception as e:
         print_error(e)
         current_state["downloaded_size"], current_state["total_size"] = 0, 0
-        current_state["finished"] = True
         current_state["failed_reason"] = redact_access_token(traceback.format_exc().rstrip())
         try:
             os.remove(temp_path)
@@ -432,27 +466,9 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None) 
     finally:
         if response is not None:
             response.close()
+        current_state["finished"] = True
 
     refresh_download_progress() # 每个任务结束时刷新一次，重试等待期间也能看到完成数与失败数
-
-    if all(state["finished"] for state in download_states): # 所有文件下载完成
-        ui_call(download_progress_bar.config, value=0) # 重置进度条
-        ui_call(progress_label.config, text="等待下载") # 清空进度标签
-        ui_call(download_btn.config, state="normal") # 设置下载按钮为启用状态
-
-        failed_states = [state for state in download_states if state["failed_reason"]]
-        if failed_states: # 存在下载失败的文件
-            failed_message = "\n\n".join(
-                f"{os.path.basename(state['save_path'])}\n{state['failed_reason']}"
-                for state in failed_states
-            )
-            ui_call(
-                messagebox.showwarning,
-                "下载完成",
-                f"文件已下载到：{os.path.dirname(save_path)}\n以下文件下载失败：\n{failed_message}",
-            )
-        else:
-            ui_call(messagebox.showinfo, "下载完成", f"文件已下载到：{os.path.dirname(save_path)}")
 
 def format_bytes(size: float) -> str: # 将数据单位进行格式化，返回以 KB、MB、GB、TB、PB 为单位的数据大小
     for x in ["字节", "KB", "MB", "GB", "TB"]:

@@ -8,10 +8,15 @@
 
 import requests
 
-session = requests.Session() # 初始化请求
-session.trust_env = False # 不读取系统或环境变量中的代理配置
-
 REQUEST_TIMEOUT = (10, 60) # 连接 / 相邻两次收数据的超时秒数；requests 没有全局默认超时，缺失时卡住的请求会永久挂起
+
+class TimeoutSession(requests.Session):
+    def request(self, method: str, url: str, **kwargs) -> requests.Response:
+        kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+        return super().request(method, url, **kwargs)
+
+session = TimeoutSession() # 详情、目录、音频与封面请求统一使用默认超时
+session.trust_env = False # 不读取系统或环境变量中的代理配置
 
 headers = { # 设置请求头部，包含认证信息
     "Authorization": "Bearer 0",

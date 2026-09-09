@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from src.tchmaterial_parser.network import REQUEST_TIMEOUT
 from src.tchmaterial_parser.ui import download_panel
@@ -43,12 +44,10 @@ class DownloadProgressTest(unittest.TestCase):
 
         self.label = RecordingWidget()
         self.bar = RecordingWidget()
-        previous_label = download_panel.progress_label
-        previous_bar = download_panel.download_progress_bar
-        self.addCleanup(setattr, download_panel, "progress_label", previous_label)
-        self.addCleanup(setattr, download_panel, "download_progress_bar", previous_bar)
-        download_panel.progress_label = self.label
-        download_panel.download_progress_bar = self.bar
+        for name, widget in (("progress_label", self.label), ("download_progress_bar", self.bar)):
+            widget_patch = patch.object(download_panel, name, widget, create=True)
+            widget_patch.start()
+            self.addCleanup(widget_patch.stop)
 
     def latest_label_text(self) -> str:
         return self.label.configs[-1]["text"]

@@ -130,6 +130,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
     tree_preview_images: dict[str, ImageTk.PhotoImage] = {} # 缓存大尺寸封面，用于悬停预览
     loading_tree_images: set[str] = set()
     checked_items: set[str] = set() # 已勾选末级资源的树项路径，搜索重建树视图后仍保留
+    leaf_urls = {item_id: build_resource_url(item_id, data) for item_id, data in iter_leaf_resources(resource_list)}
     checkbox_pils: dict[str, Image.Image] = {} # 三态复选框底图，跟随主题配色重建
     checkbox_icons: dict[str, ImageTk.PhotoImage] = {} # 无封面树项直接使用的复选框图标（已含右侧间距）
     tree_font = tkfont.nametofont("AppBodyFont")
@@ -151,12 +152,13 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
             path_names = (*parent_names, display_name)
             tree_item_data[item_id] = option_data
             tree_item_paths[item_id] = path_names
+            tree_item_images[item_id] = compose_item_image(item_id)
             treeview.insert(
                 parent,
                 "end",
                 iid=item_id,
                 text=display_name,
-                image=compose_item_image(item_id),
+                image=tree_item_images[item_id],
                 open=expand_all or not parent,
             )
             children: dict[str, dict] = option_data.get("children", {})
@@ -186,7 +188,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
             refresh_item_image(item_id)
 
     def item_check_state(item_id: str) -> str: # 末级资源为勾选/未勾选两态，分类按后代整体勾选情况显示三态
-        node = find_tree_node(resource_list, item_id)
+        node = tree_item_data.get(item_id) or find_tree_node(resource_list, item_id)
         if node is None:
             return "unchecked"
         children = node.get("children")
@@ -273,7 +275,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
         ui_call(load_visible_tree_icons)
 
     def insert_resource_urls(urls: list[str]) -> None: # 将链接追加到 URL 输入框，跳过已存在的行
-        existing_lines = set(url_text.get("1.0", "end").splitlines())
+        existing_lines = {line.strip() for line in url_text.get("1.0", "end").splitlines()}
         new_urls = [url for url in dict.fromkeys(urls) if url and url not in existing_lines] # 保序去重，并跳过已存在的链接
         if not new_urls:
             return
@@ -289,7 +291,7 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
             return
         url_set = set(urls)
         lines = url_text.get("1.0", "end").splitlines()
-        kept_lines = [line for line in lines if line not in url_set]
+        kept_lines = [line for line in lines if line.strip() not in url_set]
         if len(kept_lines) == len(lines):
             return
         url_text.delete("1.0", "end")
@@ -300,7 +302,8 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
         checked_count_label.config(text=f"已选 {len(checked_items)} 项" if checked_items else "")
 
     def toggle_item(item_id: str) -> None: # 切换树项勾选状态：分类按三态决定目标状态并级联其下所有末级资源
-        node = find_tree_node(resource_list, item_id)
+        sync_checked_items() # 文本修改事件尚未处理时，也以最新输入为准
+        node = tree_item_data.get(item_id) # 搜索时只操作当前筛选出的子树
         if node is None:
             return
         children = node.get("children")
@@ -313,32 +316,36 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
         set_items_checked(leafs, checked)
 
     def set_items_checked(leafs: list[tuple[str, dict]], checked: bool) -> None: # 批量更新末级资源勾选状态，级联刷新图标并同步 URL 输入框
-        changed_leafs: list[tuple[str, dict]] = []
-        for leaf_id, leaf_data in leafs:
-            if checked == (leaf_id in checked_items):
-                continue
-            if checked:
-                checked_items.add(leaf_id)
-            else:
-                checked_items.discard(leaf_id)
-            changed_leafs.append((leaf_id, leaf_data))
-        if not changed_leafs:
+        urls = [leaf_urls[leaf_id] for leaf_id, _leaf_data in leafs]
+        if checked:
+            insert_resource_urls(urls)
+        else:
+            remove_resource_urls(urls)
+        sync_checked_items()
+
+    def sync_checked_items() -> None: # 粘贴、删除、撤销以及树项操作统一以输入框中的链接为准
+        urls = {line.strip() for line in url_text.get("1.0", "end").splitlines()}
+        new_checked_items = {item_id for item_id, url in leaf_urls.items() if url in urls}
+        changed_ids = checked_items.symmetric_difference(new_checked_items)
+        if not changed_ids:
             return
+        checked_items.clear()
+        checked_items.update(new_checked_items)
 
         refresh_ids: set[str] = set() # 状态变化的末级资源及其各级祖先分类都需要刷新图标
-        for leaf_id, _leaf_data in changed_leafs:
+        for leaf_id in changed_ids:
             segments = leaf_id.split(":")
             refresh_ids.update(":".join(segments[:index]) for index in range(1, len(segments) + 1))
         for refresh_id in refresh_ids:
             if refresh_id in tree_item_data:
                 refresh_item_image(refresh_id)
 
-        urls = [build_resource_url(leaf_id, leaf_data) for leaf_id, leaf_data in changed_leafs]
-        if checked:
-            insert_resource_urls(urls)
-        else:
-            remove_resource_urls(urls)
         update_checked_count()
+
+    def on_urls_modified(_event: tk.Event) -> None:
+        if url_text.edit_modified():
+            url_text.edit_modified(False)
+            sync_checked_items()
 
     def on_tree_press(event: tk.Event) -> str | None: # 按下鼠标时隐藏悬停提示；左键点击标题或封面（含复选框）时切换勾选，点击箭头或缩进保持展开收起
         hide_tree_tooltip()
@@ -476,6 +483,9 @@ def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_tex
     theme.on_theme_applied(on_theme_changed) # 主题切换后重建复选框配色并刷新树项图标
     update_checked_count()
     refresh_resource_tree() # 初始展示完整资源树并展开一级目录
+    sync_checked_items()
+    url_text.edit_modified(False)
+    url_text.bind("<<Modified>>", on_urls_modified, add="+")
     search_var.trace_add("write", schedule_search)
     treeview.configure(yscrollcommand=on_tree_view_change)
     treeview.bind("<space>", on_tree_space)
