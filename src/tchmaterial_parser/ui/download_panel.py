@@ -30,6 +30,8 @@ _MIN_REQUEST_INTERVAL = 0.2
 _download_slots = threading.BoundedSemaphore(3)
 _rate_lock = threading.Lock()
 _last_request_at = 0.0
+# 用户请求停止当前批次：正在传输的任务尽快收尾，排队中的任务不再发起请求。
+_stop_requested = threading.Event()
 
 def redact_access_token(text: str) -> str:
     """隐藏查询串里可能残留的 accessToken。本工具不再主动拼接该参数，但异常或用户粘贴的 URL 仍可能带上。"""
@@ -203,10 +205,9 @@ def allocate_download_paths(resources: list[ResourceInfo], directory: str) -> li
         stem, extension = os.path.splitext(candidate)
         sequence = 2
 
-        # 同时检查最终文件和可辨识的 “最终文件.tmp”；后者可能属于另一个仍在运行的程序实例。
+        # 已完整下载的同名文件保留原路径，由批次跳过；“最终文件.tmp” 可能属于另一个仍在运行的程序实例，必须避开。
         while (
             filename_key(candidate) in reserved_paths
-            or os.path.exists(candidate)
             or os.path.exists(f"{candidate}.tmp")
         ):
             candidate = f"{stem} ({sequence}){extension}"
@@ -234,6 +235,7 @@ def refresh_download_progress() -> None: # 汇总全部任务状态刷新进度�
     all_total_size = sum(state["total_size"] for state in states)
     finished_number = len([state for state in states if state["finished"]])
     failed_number = len([state for state in states if state["failed_reason"]])
+    skipped_number = len([state for state in states if state.get("skipped")])
     total_number = len(states)
     if all_total_size > 0: # 防止下面一行代码除以 0 而报错
         download_progress = (all_downloaded_size / all_total_size) * 100
@@ -241,6 +243,8 @@ def refresh_download_progress() -> None: # 汇总全部任务状态刷新进度�
         progress_text = f"{format_bytes(all_downloaded_size)}/{format_bytes(all_total_size)} ({download_progress:.2f}%) 已下载 {finished_number}/{total_number}"
     else:
         progress_text = f"已下载 {format_bytes(all_downloaded_size)}，已完成 {finished_number}/{total_number} 个文件"
+    if skipped_number:
+        progress_text += f"，{skipped_number} 个已跳过"
     if failed_number:
         progress_text += f"，{failed_number} 个失败"
     ui_call(progress_label.config, text=progress_text) # 更新标签以显示当前下载进度
@@ -319,8 +323,17 @@ def parse_and_copy() -> None: # 解析并复制链接
 
     parse_urls_in_background(list(urls), False, copy_urls)
 
+def stop_downloads() -> None: # 请求停止当前批次；已下载完成的文件保留，未完成的临时文件删除
+    _stop_requested.set()
+    progress_label.config(text="正在停止下载")
+    download_btn.config(state="disabled") # 避免重复触发，批次结束后统一恢复
+
 def download() -> None: # 下载资源文件
     global download_states
+    if downloads_active(): # 下载进行中时，同一个按钮用于停止
+        stop_downloads()
+        return
+
     download_btn.config(state="disabled") # 设置下载按钮为禁用状态
     download_progress_bar.config(value=0) # 重置上一批任务可能残留的进度
     download_states = [] # 初始化下载状态
@@ -370,8 +383,11 @@ def download() -> None: # 下载资源文件
             return
 
         progress_label.config(text=f"正在下载 {len(download_targets)} 个文件")
-        directory = dir_path if len(resources_info_list) > 1 else os.path.dirname(download_targets[0][1])
-        start_download_batch(download_targets, directory)
+        batch_download = len(resources_info_list) > 1
+        if batch_download: # 单文件下载由保存对话框确认覆盖，不跳过也无需停止按钮
+            download_btn.config(state="normal", text="停止下载")
+        directory = dir_path if batch_download else os.path.dirname(download_targets[0][1])
+        start_download_batch(download_targets, directory, skip_existing=batch_download)
 
         if failed_urls:
             messagebox.showwarning("警告", "以下 “行” 无法解析：\n" + "\n".join(failed_urls)) # 显示警告对话框
@@ -379,20 +395,33 @@ def download() -> None: # 下载资源文件
     parse_urls_in_background(list(urls), bookmark_var.get(), start_downloads)
 
 def create_download_state(url: str, save_path: str) -> dict:
-    return { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None }
+    return { "download_url": url, "save_path": save_path, "downloaded_size": 0, "total_size": 0, "finished": False, "failed_reason": None, "skipped": False, "stopped": False }
 
-def start_download_batch(targets: list[tuple[ResourceInfo, str]], directory: str) -> None:
+def start_download_batch(targets: list[tuple[ResourceInfo, str]], directory: str, skip_existing: bool = False) -> None:
     global download_states
+    _stop_requested.clear()
     # 所有排队任务先登记，快速失败或完成的线程也不会漏算尚未启动的任务。
     states = [create_download_state(resource.url, save_path) for resource, save_path in targets]
     download_states = states
+
+    if skip_existing: # 临时文件重命名是下载的最后一步，目标文件存在即说明上一轮已完整下载
+        for (_, save_path), state in zip(targets, states):
+            if os.path.exists(save_path):
+                state["skipped"], state["finished"] = True, True
+
+    pending = [(target, state) for target, state in zip(targets, states) if not state["skipped"]]
+    if len(pending) != len(states): # 立即反馈跳过数量，不必等第一个文件开始传输
+        refresh_download_progress()
+    if not pending: # 整批文件都已下载过，无需启动线程
+        finish_download_batch(states, directory)
+        return
 
     def worker() -> None:
         # 批量勾选可能产生数千个文件，仅保留少量工作线程，其余任务排队。
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = [
                 executor.submit(download_file, resource.url, save_path, resource.chapters, state)
-                for (resource, save_path), state in zip(targets, states)
+                for (resource, save_path), state in pending
             ]
             for future in futures:
                 future.result()
@@ -403,7 +432,15 @@ def start_download_batch(targets: list[tuple[ResourceInfo, str]], directory: str
 def finish_download_batch(states: list[dict], directory: str) -> None: # 在主线程统一恢复控件并显示整批结果
     download_progress_bar.config(value=0)
     progress_label.config(text="等待下载")
-    download_btn.config(state="normal")
+    download_btn.config(state="normal", text="下载")
+
+    _stop_requested.clear() # 停止标志只在一个批次内有效
+    stopped = any(state.get("stopped") for state in states)
+    skipped_number = len([state for state in states if state.get("skipped")])
+    title = "下载已停止" if stopped else "下载完成"
+    summary = f"下载已停止。\n文件已下载到：{directory}" if stopped else f"文件已下载到：{directory}"
+    if skipped_number:
+        summary += f"\n已跳过 {skipped_number} 个此前已下载完成的文件。"
 
     failed_states = [state for state in states if state["failed_reason"]]
     if failed_states:
@@ -411,15 +448,20 @@ def finish_download_batch(states: list[dict], directory: str) -> None: # 在主�
             f"{os.path.relpath(state['save_path'], directory)}\n{state['failed_reason']}"
             for state in failed_states
         )
-        messagebox.showwarning("下载完成", f"文件已下载到：{directory}\n以下文件下载失败：\n{failed_message}")
+        messagebox.showwarning(title, f"{summary}\n以下文件下载失败：\n{failed_message}")
     else:
-        messagebox.showinfo("下载完成", f"文件已下载到：{directory}")
+        messagebox.showinfo(title, summary)
 
 def download_file(url: str, save_path: str, chapters: list[dict] | None = None, current_state: dict | None = None) -> None: # 下载文件
     if current_state is None: # 保留单独下载文件的调用方式
         current_state = create_download_state(url, save_path)
         download_states.append(current_state)
     temp_path = f"{save_path}.tmp"
+
+    if _stop_requested.is_set(): # 已请求停止，排队中的任务不再发起请求
+        current_state["stopped"], current_state["finished"] = True, True
+        refresh_download_progress()
+        return
 
     response = None
     try:
@@ -436,12 +478,21 @@ def download_file(url: str, save_path: str, chapters: list[dict] | None = None, 
                     for chunk in response.iter_content( # 分块下载
                         chunk_size=131072 if current_state["total_size"] < 20971520 else 262144 if current_state["total_size"] < 52428800 else 524288
                     ):
+                        if _stop_requested.is_set(): # 用户停止下载，放弃当前文件
+                            current_state["stopped"] = True
+                            break
                         if chunk: # 过滤掉 Keep-Alive 块
                             file.write(chunk)
                             current_state["downloaded_size"] += len(chunk)
                             refresh_download_progress()
 
-                if current_state["total_size"] > 0 and current_state["downloaded_size"] != current_state["total_size"]: # 文件下载不完整
+                if current_state["stopped"]: # 未完成的临时文件不保留，下次下载可重新开始
+                    current_state["downloaded_size"], current_state["total_size"] = 0, 0
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+                elif current_state["total_size"] > 0 and current_state["downloaded_size"] != current_state["total_size"]: # 文件下载不完整
                     current_state["failed_reason"] = f"文件下载不完整，需下载 {current_state['total_size']} 字节，实际下载 {current_state['downloaded_size']} 字节"
                     current_state["downloaded_size"], current_state["total_size"] = 0, 0
                     try:

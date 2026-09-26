@@ -69,7 +69,7 @@ class DownloadPathTest(unittest.TestCase):
             "[人教版] 同名教材 (2).pdf",
         ])
 
-    def test_avoids_existing_final_and_temporary_files(self) -> None:
+    def test_keeps_existing_final_file_path_but_avoids_temporary_files(self) -> None:
         resources = [
             resource("已有教材", "book-1"),
             resource("未完成教材", "book-2"),
@@ -80,7 +80,8 @@ class DownloadPathTest(unittest.TestCase):
             open(os.path.join(directory, "未完成教材.pdf.tmp"), "wb").close()
             paths = allocate_download_paths(resources, directory)
 
-        self.assertEqual([os.path.basename(path) for path in paths], ["已有教材 (2).pdf", "未完成教材 (2).pdf"])
+        # 已下载完成的文件保留原路径，交由批次跳过；.tmp 可能属于另一个运行中的实例，仍需避开
+        self.assertEqual([os.path.basename(path) for path in paths], ["已有教材.pdf", "未完成教材 (2).pdf"])
 
     def test_places_files_into_category_subdirectories(self) -> None:
         resources = [
