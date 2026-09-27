@@ -188,6 +188,21 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
             if not resource_url:
                 return None
 
+            # 听力课件的源文件名常带逗号和空格。私有 CDN 对这种对象键返回 400 InvalidArgument，
+            # 与 Token 是否有效无关；官网播放器使用的是转码后的 href。有 href 时改下这一份。
+            if resource_format == "mp3":
+                for item in resource_data["ti_items"]:
+                    if item.get("ti_file_flag") != "href" or item.get("ti_format") != "mp3":
+                        continue
+                    href_url = item.get("ti_storage")
+                    if href_url:
+                        href_url = href_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
+                    else:
+                        href_url = next((url for url in item.get("ti_storages") or [] if url), None)
+                    if href_url:
+                        resource_url = href_url
+                        break
+
             # 通过 ebook_mapping + tree 接口组合获取章节目录
             chapters: list[dict] = []
             if bookmarks and resource_format == "pdf":

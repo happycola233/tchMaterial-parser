@@ -100,6 +100,54 @@ class AudioParseTest(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0][2], "pdf")
 
+    def test_listening_courseware_prefers_transcoded_mp3(self) -> None:
+        # 源文件名里的逗号会让私有 CDN 返回 400，详情里的 href 才是可下载地址。
+        class ListeningSession:
+            def get(self, url: str, *args: tuple, **kwargs: dict) -> FakeResponse:
+                self.url = url
+                return FakeResponse({
+                    "id": "listen-1",
+                    "title": "Starter Unit 1 Section A, 2b",
+                    "global_title": {"zh-CN": "Starter Unit 1 Section A, 2b"},
+                    "ti_items": [
+                        {
+                            "ti_file_flag": "href",
+                            "ti_format": "mp3",
+                            "ti_is_source_file": False,
+                            "ti_storage": "cs_path:${ref-path}/edu_product/esp/listening/listen-1.t/transcode/audios/listen-1.mp3",
+                        },
+                        {
+                            "ti_file_flag": "href-clip",
+                            "ti_format": "mp3",
+                            "ti_is_source_file": False,
+                            "ti_storage": "cs_path:${ref-path}/edu_product/esp/listening/listen-1.t/transcode/audios/clip-listen-1.mp3",
+                        },
+                        {
+                            "ti_file_flag": "source",
+                            "ti_format": "mp3",
+                            "ti_is_source_file": True,
+                            "ti_storage": "cs_path:${ref-path}/edu_product/esp/listening/listen-1.pkg/02 Starter Unit 1 Section A, 2b.mp3",
+                        },
+                    ],
+                })
+
+        session = ListeningSession()
+        api.session = session
+        url = "https://basic.smartedu.cn/syncClassroom/detail?resourceId=listen-1&resourceType=listening"
+        results = api.parse(url, False)
+        self.assertIsNotNone(results)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].title, "Starter Unit 1 Section A, 2b")
+        self.assertEqual(results[0].file_format, "mp3")
+        self.assertEqual(
+            results[0].url,
+            "https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/listening/listen-1.t/transcode/audios/listen-1.mp3",
+        )
+        self.assertEqual(
+            session.url,
+            "https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/listening/resources/details/listen-1.json",
+        )
+
     def test_audio_fetch_failure_is_ignored(self) -> None:
         class FailingAudiosSession(FakeSession):
             def get(self, url: str, *args: tuple, **kwargs: dict) -> FakeResponse:
