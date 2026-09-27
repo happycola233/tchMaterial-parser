@@ -47,6 +47,43 @@ def combine_resource_title(root_title: str | None, resource_title: str) -> str:
         return resource_title
     return f"{root_title} - {resource_title}"
 
+# 官网用 source 的格式判断资源是不是音频，真正播放的不是 source。
+# 音频播放器依次找 href、href-clip；ogg 和各档 m3u8 是另外的播放地址。
+AUDIO_FORMATS = frozenset({"mp3", "wav", "wma", "ogg", "aac", "flac", "m4a"})
+AUDIO_PLAYBACK_FLAGS = ("href", "href-clip")
+
+def storage_url(item: dict) -> str | None:
+    """把平台存储地址换成 r1 私有 CDN。已经是 https 的地址保持原样。"""
+    resource_url = item.get("ti_storage")
+    if resource_url:
+        return resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
+    return next((url for url in item.get("ti_storages") or [] if url), None)
+
+def select_audio_playback(ti_items: list[dict]) -> tuple[str, str] | None:
+    """按官网音频播放器的顺序选择可播放文件。不是音频资源时返回 None。"""
+    source = next((item for item in ti_items if item.get("ti_file_flag") == "source"), None)
+    source_format = (source or {}).get("ti_format")
+    playback_items = [
+        item for item in ti_items
+        if item.get("ti_file_flag") in AUDIO_PLAYBACK_FLAGS and item.get("ti_format") in AUDIO_FORMATS
+    ]
+    if source_format not in AUDIO_FORMATS and not playback_items:
+        return None
+
+    for flag in AUDIO_PLAYBACK_FLAGS:
+        for item in playback_items:
+            if item.get("ti_file_flag") != flag:
+                continue
+            resource_url = storage_url(item)
+            if resource_url:
+                return resource_url, item.get("ti_format") or "mp3"
+
+    if source is not None and source_format in AUDIO_FORMATS:
+        resource_url = storage_url(source)
+        if resource_url:
+            return resource_url, source_format
+    return None
+
 def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资源，获取资源下载链接
     try:
         resources_info: list[ResourceInfo] = []
@@ -149,9 +186,14 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
             title = combine_resource_title(root_title, resource_title)
             resource_url: str | None = None
             resource_format = "pdf"
+            audio_playback = select_audio_playback(resource_data.get("ti_items") or [])
+            if audio_playback:
+                resource_url, resource_format = audio_playback
 
-            for item in resource_data["ti_items"]: # 寻找存有资源链接列表的项
-                if not item["ti_is_source_file"]:
+            for item in resource_data["ti_items"]: # 文档仍取源文件；音频已在上面按播放器规则选完
+                if resource_url:
+                    break
+                if not item.get("ti_is_source_file"):
                     continue
 
                 resource_format = item.get("ti_format") or "pdf"
@@ -169,7 +211,7 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
 
             if not resource_url: # 使用不同的判断条件寻找源文件
                 for item in resource_data["ti_items"]:
-                    if item["ti_file_flag"] not in ("source", "pdf", "ppt", "pptx", "doc", "docx"):
+                    if item.get("ti_file_flag") not in ("source", "pdf", "ppt", "pptx", "doc", "docx"):
                         continue
 
                     resource_format = item.get("ti_format") or "pdf"
@@ -187,21 +229,6 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
 
             if not resource_url:
                 return None
-
-            # 听力课件的源文件名常带逗号和空格。私有 CDN 对这种对象键返回 400 InvalidArgument，
-            # 与 Token 是否有效无关；官网播放器使用的是转码后的 href。有 href 时改下这一份。
-            if resource_format == "mp3":
-                for item in resource_data["ti_items"]:
-                    if item.get("ti_file_flag") != "href" or item.get("ti_format") != "mp3":
-                        continue
-                    href_url = item.get("ti_storage")
-                    if href_url:
-                        href_url = href_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
-                    else:
-                        href_url = next((url for url in item.get("ti_storages") or [] if url), None)
-                    if href_url:
-                        resource_url = href_url
-                        break
 
             # 通过 ebook_mapping + tree 接口组合获取章节目录
             chapters: list[dict] = []
@@ -286,40 +313,6 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
                 get_relative_dir(resource_data) or root_dir,
             )
 
-        def get_audio_info(audio_data: dict, root_title: str | None = None, edition: str | None = None) -> ResourceInfo | None: # 解析教材关联的音频资源（如英语教材听力）
-            # 音频资源的标题存放在 global_title 字典中（键为语言代码，如 zh-CN）
-            title_data = audio_data.get("global_title")
-            audio_title: str = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or audio_data.get("title") or audio_data.get("id")
-            title = combine_resource_title(root_title, audio_title)
-            resource_url: str | None = None
-            resource_format = "mp3"
-
-            # 优先选择转码后的 MP3 文件（ti_file_flag 为 href），否则回退到源文件
-            for item in audio_data["ti_items"]:
-                if item.get("ti_file_flag") not in ("href", "source") or item.get("ti_format") != "mp3":
-                    continue
-
-                resource_url = item.get("ti_storage") # 获取并构造资源的 URL
-                if resource_url:
-                    resource_url = resource_url.replace("cs_path:${ref-path}", "https://r1-ndr-private.ykt.cbern.com.cn")
-                else:
-                    resource_url = next((url for url in item.get("ti_storages") or [] if url), None)
-                if resource_url:
-                    resource_format = item.get("ti_format") or "mp3"
-                    break
-
-            if not resource_url:
-                return None
-
-            return ResourceInfo(
-                title,
-                resource_url,
-                resource_format,
-                [],
-                edition or get_edition_name(audio_data),
-                get_relative_dir(audio_data) or root_dir,
-            )
-
         if content_type == "thematic_course": # 专题课程
             resources_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/special_edu/thematic_course/{content_id}/resources/list.json")
             resources_data: list[dict] = resources_resp.json()
@@ -345,7 +338,7 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
                     audios_resp = session.get(f"https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/{content_id}/relation_audios.json")
                     audios_data: list[dict] = audios_resp.json()
                     for audio in audios_data:
-                        audio_info = get_audio_info(audio, data.get("title"), root_edition)
+                        audio_info = get_resource_info(audio, data.get("title"), root_edition)
                         if audio_info:
                             resources_info.append(audio_info)
                 except Exception: # 音频资源不是必需的，获取失败时直接跳过

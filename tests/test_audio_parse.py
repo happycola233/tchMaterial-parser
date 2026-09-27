@@ -148,6 +148,85 @@ class AudioParseTest(unittest.TestCase):
             "https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/listening/resources/details/listen-1.json",
         )
 
+    def test_audio_playback_ignores_source_order_and_falls_back_to_clip(self) -> None:
+        source_first = api.select_audio_playback([
+            {
+                "ti_file_flag": "source",
+                "ti_format": "mp3",
+                "ti_storage": "cs_path:${ref-path}/edu_product/esp/listening/a.pkg/Section A, 2b.mp3",
+            },
+            {
+                "ti_file_flag": "href",
+                "ti_format": "mp3",
+                "ti_storage": "cs_path:${ref-path}/edu_product/esp/listening/a.t/transcode/audios/a.mp3",
+            },
+        ])
+        self.assertEqual(
+            source_first,
+            ("https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/listening/a.t/transcode/audios/a.mp3", "mp3"),
+        )
+
+        clip_only = api.select_audio_playback([
+            {
+                "ti_file_flag": "source",
+                "ti_format": "mp3",
+                "ti_storage": "cs_path:${ref-path}/edu_product/esp/listening/a.pkg/Section A, 2b.mp3",
+            },
+            {
+                "ti_file_flag": "href-clip",
+                "ti_format": "mp3",
+                "ti_storage": "cs_path:${ref-path}/edu_product/esp/listening/a.t/transcode/audios/clip-a.mp3",
+            },
+            {
+                "ti_file_flag": "href-ogg",
+                "ti_format": "ogg",
+                "ti_storage": "cs_path:${ref-path}/edu_product/esp/listening/a.t/transcode/audios/a.ogg",
+            },
+        ])
+        self.assertEqual(
+            clip_only,
+            ("https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/listening/a.t/transcode/audios/clip-a.mp3", "mp3"),
+        )
+        self.assertIsNone(api.select_audio_playback([
+            {"ti_file_flag": "source", "ti_format": "pdf", "ti_storage": "https://example.com/book.pdf"},
+            {"ti_file_flag": "href", "ti_format": "m3u8", "ti_storage": "https://example.com/video.m3u8"},
+        ]))
+
+    def test_course_package_keeps_pdf_and_skips_video_playlist(self) -> None:
+        class PackageSession:
+            def get(self, url: str, *args: tuple, **kwargs: dict) -> FakeResponse:
+                return FakeResponse({
+                    "id": "package-1",
+                    "title": "Section A",
+                    "relations": {
+                        "national_course_resource": [
+                            {
+                                "title": "视频课程",
+                                "ti_items": [
+                                    {"ti_file_flag": "href", "ti_format": "m3u8", "ti_is_source_file": False, "ti_storage": "https://example.com/video.m3u8"},
+                                ],
+                            },
+                            {
+                                "title": "课件",
+                                "ti_items": [
+                                    {"ti_file_flag": "pdf", "ti_format": "pdf", "ti_is_source_file": False, "ti_storage": "cs_path:${ref-path}/edu_product/esp/coursewares/a.t/transcode/pdf.pdf"},
+                                ],
+                            },
+                        ],
+                    },
+                })
+
+        api.session = PackageSession()
+        url = "https://basic.smartedu.cn/syncClassroom/detail?resourceId=package-1&resourceType=national_lesson"
+        results = api.parse(url, False)
+        self.assertIsNotNone(results)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].file_format, "pdf")
+        self.assertEqual(
+            results[0].url,
+            "https://r1-ndr-private.ykt.cbern.com.cn/edu_product/esp/coursewares/a.t/transcode/pdf.pdf",
+        )
+
     def test_audio_fetch_failure_is_ignored(self) -> None:
         class FailingAudiosSession(FakeSession):
             def get(self, url: str, *args: tuple, **kwargs: dict) -> FakeResponse:
