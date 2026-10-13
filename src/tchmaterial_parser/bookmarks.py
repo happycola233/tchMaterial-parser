@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 # 为下载好的 PDF 写入章节书签
 
-from pypdf import PdfReader, PdfWriter
+import os
+
+from pypdf import PdfReader, PdfWriter, apply_configuration, get_configuration
 
 from .platform_utils import print_error
 
@@ -9,40 +11,43 @@ def add_bookmarks(pdf_path: str, chapters: list[dict]) -> None: # 给 PDF 添加
     try:
         if not chapters:
             return
-        reader = PdfReader(pdf_path)
-        writer = PdfWriter()
-        writer.append_pages_from_reader(reader)
+        # 平台 PDF 的未压缩大图可能超过默认流上限；按实际文件大小放宽，仅作用于当前任务。
+        stream_limit = max(get_configuration().maximum_declared_stream_length, os.path.getsize(pdf_path))
+        with apply_configuration(maximum_declared_stream_length=stream_limit):
+            reader = PdfReader(pdf_path)
+            writer = PdfWriter()
+            writer.append_pages_from_reader(reader)
 
-        def add_chapter(chapter_list: list[dict], parent=None): # 递归添加书签的内部函数
-            for chapter in chapter_list:
-                title: str = chapter.get("title", "未知章节")
-                p_index: int | None = chapter.get("page_index")
-                if p_index is None: # 如果值为 None 或者不存在，跳过这个书签
-                    print_error(ValueError(f"章节 “{title}” 的页码索引无效，已跳过此处书签添加"))
-                    continue
+            def add_chapter(chapter_list: list[dict], parent=None): # 递归添加书签的内部函数
+                for chapter in chapter_list:
+                    title: str = chapter.get("title", "未知章节")
+                    p_index: int | None = chapter.get("page_index")
+                    if p_index is None: # 如果值为 None 或者不存在，跳过这个书签
+                        print_error(ValueError(f"章节 “{title}” 的页码索引无效，已跳过此处书签添加"))
+                        continue
 
-                try: # 尝试将其转为整数并减 1（pypdf 页码从 0 开始)
-                    page_num: int = int(p_index) - 1
-                except (ValueError, TypeError) as e: # 如果转换失败，跳过这个书签
-                    print_error(e)
-                    continue
+                    try: # 尝试将其转为整数并减 1（pypdf 页码从 0 开始)
+                        page_num: int = int(p_index) - 1
+                    except (ValueError, TypeError) as e: # 如果转换失败，跳过这个书签
+                        print_error(e)
+                        continue
 
-                if page_num < 0 or page_num >= len(writer.pages):
-                    continue
+                    if page_num < 0 or page_num >= len(writer.pages):
+                        continue
 
-                # 添加书签，其中 parent 是父级书签对象，用于处理多级目录
-                bookmark = writer.add_outline_item(title, page_num, parent=parent)
+                    # 添加书签，其中 parent 是父级书签对象，用于处理多级目录
+                    bookmark = writer.add_outline_item(title, page_num, parent=parent)
 
-                # 如果有子章节（children），递归添加
-                if chapter.get("children"):
-                    add_chapter(chapter["children"], parent=bookmark)
+                    # 如果有子章节（children），递归添加
+                    if chapter.get("children"):
+                        add_chapter(chapter["children"], parent=bookmark)
 
-        # 开始处理章节数据
-        add_chapter(chapters)
+            # 开始处理章节数据
+            add_chapter(chapters)
 
-        # 保存修改后的文件
-        with open(pdf_path, "wb") as f:
-            writer.write(f)
+            # 保存修改后的文件
+            with open(pdf_path, "wb") as f:
+                writer.write(f)
 
     except Exception as e:
         # 交由下载任务记录失败；否则损坏或未写完的 PDF 会被当作成功文件发布。

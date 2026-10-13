@@ -8,7 +8,7 @@ import time
 from unittest.mock import Mock
 
 import pytest
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter, apply_configuration
 
 from src.tchmaterial_parser.api import ResourceInfo
 from src.tchmaterial_parser.ui import download_panel as panel
@@ -240,6 +240,19 @@ def test_real_pdf_bookmarks_are_written_before_completion(downloads, monkeypatch
     assert panel.task_status(panel.download_states[0]) == "已完成"
     with path.open("rb") as file:
         assert PdfReader(file).outline[0].title == "第一章"
+
+
+def test_large_pdf_stream_finishes_download_with_bookmarks(downloads, monkeypatch, image_pdf):
+    directory, _ = downloads
+    data = image_pdf.read_bytes()
+    response = Response({"Content-Length": str(len(data))}, [data])
+    monkeypatch.setattr(panel, "request_download", lambda *args: (response, []))
+    path = directory / "book.pdf"
+    with apply_configuration(maximum_declared_stream_length=1024):
+        panel.download_file(resource().url, str(path), [{"title": "第一章", "page_index": 1}])
+    assert panel.task_status(panel.download_states[0]) == "已完成"
+    assert not path.with_suffix(".pdf.tmp").exists()
+    assert PdfReader(path).outline[0].title == "第一章"
 
 
 def test_invalid_pdf_does_not_replace_existing_file(downloads, monkeypatch):

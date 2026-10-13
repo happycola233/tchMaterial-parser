@@ -14,7 +14,7 @@ authors = [{name = "肥宅水水呀"}, {name = "晨叶梦春", email = "wuziqian
 dependencies = [
     "pillow>=10,<13",
     "psutil>=5.9,<8",
-    "pypdf>=5,<7",
+    "pypdf>=6.18,<7",
     "requests>=2.31,<3",
     "sv-ttk>=2.6,<3",
     "pywin32>=306; sys_platform == 'win32'",
