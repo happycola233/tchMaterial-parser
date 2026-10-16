@@ -3,6 +3,7 @@
 # 本模块持有与下载相关的几个控件句柄，因此这些控件的读写不必跨模块
 
 import os, re, threading, time, traceback
+import unicodedata
 import tkinter as tk
 from collections import Counter
 from collections.abc import Callable
@@ -16,7 +17,7 @@ from requests import RequestException
 from . import runtime
 from .runtime import thread_it, ui_call
 from .. import config
-from ..api import ResourceInfo, parse
+from ..api import AUDIO_FORMATS, ResourceInfo, parse
 from ..bookmarks import add_bookmarks
 from ..network import REQUEST_TIMEOUT, request_headers, session
 from ..platform_utils import print_error
@@ -200,9 +201,9 @@ def download_filename(resource: ResourceInfo) -> str:
 
 def filename_key(filename: str) -> str:
     """以跨平台保守方式比较文件名，提前避开 Windows/macOS 上的大小写冲突。"""
-    return os.path.normcase(filename).casefold()
+    return unicodedata.normalize("NFC", os.path.normcase(filename)).casefold()
 
-def allocate_download_paths(resources: list[ResourceInfo], directory: str) -> list[str]:
+def _allocate_download_paths(resources: list[ResourceInfo], directory: str) -> list[str]:
     """在线程启动前为批量任务分配唯一目标路径，防止多个线程共用同一个 .tmp 文件。"""
     base_filenames = [download_filename(resource) for resource in resources]
     base_counts = Counter(filename_key(filename) for filename in base_filenames)
@@ -227,6 +228,7 @@ def allocate_download_paths(resources: list[ResourceInfo], directory: str) -> li
         while (
             filename_key(candidate) in reserved_paths
             or os.path.exists(f"{candidate}.tmp")
+            or os.path.isdir(candidate)
         ):
             candidate = f"{stem} ({sequence}){extension}"
             sequence += 1
@@ -234,6 +236,70 @@ def allocate_download_paths(resources: list[ResourceInfo], directory: str) -> li
         reserved_paths.add(filename_key(candidate))
         allocated_paths.append(candidate)
     return allocated_paths
+
+def audio_download_title(resource: ResourceInfo) -> str:
+    title = resource.audio_title or resource.title
+    if resource.textbook_title and resource.audio_title:
+        # 只移除已知父标题及明确的组合分隔符，教材和单元标题本身都可能含连字符。
+        prefix = r"\s+".join(re.escape(part) for part in resource.textbook_title.split())
+        match = re.match(rf"^{prefix}\s+-\s+(.+)$", title, flags=re.DOTALL)
+        if match:
+            return match[1]
+    return title
+
+
+def _audio_directory(parent: str, name: str) -> str:
+    """已有同名普通文件时另选目录，不移动或覆盖用户文件。"""
+    candidate = os.path.join(parent, sanitize_filename(name))
+    stem = candidate
+    sequence = 2
+    while os.path.lexists(candidate) and not os.path.isdir(candidate):
+        candidate = f"{stem} ({sequence})"
+        sequence += 1
+    return candidate
+
+
+def allocate_download_paths(resources: list[ResourceInfo], directory: str) -> list[str]:
+    """音频放入 mp3/教材目录；同时识别旧规则的完整文件，供批次跳过。"""
+    legacy_paths = _allocate_download_paths(resources, directory)
+    organized = []
+    for resource in resources:
+        if resource.file_format.lower() not in AUDIO_FORMATS:
+            organized.append(resource)
+            continue
+        category = os.path.join(directory, *(sanitize_filename(part) for part in resource.relative_dir))
+        audio_dir = _audio_directory(category, "mp3")
+        if resource.textbook_title:
+            audio_dir = _audio_directory(audio_dir, resource.textbook_title)
+        organized.append(resource._replace(
+            title=audio_download_title(resource),
+            edition=None, # 教材目录已隔离版别；避免批次内其他教材改变音频文件名
+            relative_dir=tuple(os.path.relpath(audio_dir, directory).split(os.sep)),
+        ))
+
+    paths = _allocate_download_paths(organized, directory)
+    reserved = {filename_key(path) for path in paths}
+    legacy_counts = Counter(filename_key(os.path.join(*resource.relative_dir, download_filename(resource)))
+                            for resource in resources)
+    for index, (resource, old_path, new_path) in enumerate(zip(resources, legacy_paths, paths)):
+        if resource.file_format.lower() not in AUDIO_FORMATS or old_path == new_path:
+            continue
+        # 新位置优先；旧位置只用于跳过完整文件，不迁移，也不把 .tmp 当作已下载。
+        if os.path.isfile(new_path):
+            continue
+        candidates = [old_path]
+        legacy_key = filename_key(os.path.join(*resource.relative_dir, download_filename(resource)))
+        if resource.edition and legacy_counts[legacy_key] == 1:
+            # 旧批次可能因其他版别的同名标题加过前缀；单独补下载时也要识别。
+            category = os.path.join(directory, *(sanitize_filename(part) for part in resource.relative_dir))
+            candidates.append(os.path.join(category, sanitize_filename(f"[{resource.edition}] {download_filename(resource)}")))
+        for candidate in candidates:
+            if (os.path.isfile(candidate) and not os.path.exists(f"{candidate}.tmp")
+                    and filename_key(candidate) not in reserved):
+                reserved.add(filename_key(candidate))
+                paths[index] = candidate
+                break
+    return paths
 
 def bind_widgets(text: tk.Text, bookmark: tk.BooleanVar, button: ttk.Button, copy_button: ttk.Button, progress_bar: ttk.Progressbar, label: ttk.Label) -> None: # 由 app.py 在创建控件后写入
     global url_text, bookmark_var, download_btn, copy_btn, download_progress_bar, progress_label

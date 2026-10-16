@@ -90,6 +90,10 @@ class AudioParseTest(unittest.TestCase):
         self.assertEqual(results[1][2], "mp3")
         self.assertEqual(results[1][0], "英语七年级上册 - 1 Starter Section 2 Activity 2")
         self.assertEqual(results[1].edition, "人教版")
+        self.assertEqual(results[1].textbook_title, DETAILS["title"])
+        self.assertEqual(results[1].audio_title, AUDIOS[0]["global_title"]["zh-CN"])
+        self.assertIsNone(results[0].textbook_title)
+        self.assertIsNone(results[0].audio_title)
         self.assertEqual(results[2][0], "英语七年级上册 - 2 Starter Section 3 Activity 1")
 
     def test_textbook_without_audio_returns_only_pdf(self) -> None:

@@ -1,9 +1,14 @@
 import unittest
 
-from src.tchmaterial_parser.api import combine_resource_title
+from src.tchmaterial_parser.api import combine_resource_title, get_resource_title
 
 
 class ResourceTitleTest(unittest.TestCase):
+    def test_original_title_falls_back_from_empty_localization(self):
+        self.assertEqual(get_resource_title({"global_title": {}, "title": "Unit 1 - Read"}), "Unit 1 - Read")
+        self.assertEqual(get_resource_title({"global_title": {"zh-CN": "", "en": "Listen"}}), "Listen")
+        self.assertEqual(get_resource_title({"id": "audio-1"}), "audio-1")
+
     def test_keeps_child_title_when_parent_is_missing(self) -> None:
         self.assertEqual(combine_resource_title(None, "子资源"), "子资源")
 

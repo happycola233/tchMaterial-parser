@@ -202,3 +202,48 @@ class DownloadBatchTest(unittest.TestCase):
         for _, path in targets:
             self.assertEqual(Path(path).read_bytes(), b"ok")
             self.assertFalse(Path(f"{path}.tmp").exists())
+
+    def test_legacy_audio_is_skipped_and_new_audio_creates_organized_directory(self):
+        old = ResourceInfo("英语 下册 - Unit 1", "https://example.com/old.mp3", "mp3", [],
+                           relative_dir=("小学", "英语"), textbook_title="英语 下册", audio_title="Unit 1")
+        new = old._replace(title="英语 下册 - Unit 2", url="https://example.com/new.mp3", audio_title="Unit 2")
+        legacy = Path(self.directory) / "小学" / "英语" / "英语 下册 - Unit 1.mp3"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_bytes(b"old")
+        targets = list(zip([old, new], panel.allocate_download_paths([old, new], self.directory)))
+
+        class Response:
+            ok = True
+            headers = {"Content-Length": "2"}
+
+            def iter_content(self, **kwargs):
+                yield b"ok"
+
+            def close(self):
+                pass
+
+        with patch.object(panel, "request_download", return_value=(Response(), [new.url])) as request:
+            panel.start_download_batch(targets, self.directory, skip_existing=True)
+            self.finish()
+        request.assert_called_once()
+        self.assertEqual(request.call_args.args[0], new.url)
+        self.assertEqual([state["skipped"] for state in panel.download_states], [True, False])
+        self.assertEqual(legacy.read_bytes(), b"old")
+        new_path = Path(targets[1][1])
+        self.assertEqual(new_path.read_bytes(), b"ok")
+        self.assertEqual(new_path.parts[-3:], ("mp3", "英语 下册", "Unit 2.mp3"))
+        self.assertFalse(Path(str(new_path) + ".tmp").exists())
+
+    def test_single_audio_save_dialog_retains_user_selected_path(self):
+        audio = ResourceInfo("英语 - Unit 1", "https://example.com/a.mp3", "mp3", [],
+                             textbook_title="英语", audio_title="Unit 1")
+        chosen = str(Path(self.directory) / "my-audio.mp3")
+        self.context.enter_context(patch.object(panel, "bookmark_var", Mock(get=lambda: False), create=True))
+        self.context.enter_context(patch.object(panel.runtime, "root", Mock(), create=True))
+        with patch.object(panel, "parse_urls_in_background", side_effect=lambda urls, marks, done: done([audio], set())), \
+                patch.object(panel.filedialog, "asksaveasfilename", return_value=chosen) as dialog, \
+                patch.object(panel, "start_download_batch") as start, \
+                patch.object(panel, "show_download_manager"):
+            panel.download(["https://example.com/book"])
+        self.assertEqual(dialog.call_args.kwargs["initialfile"], audio.title)
+        start.assert_called_once_with([(audio, chosen)], self.directory, skip_existing=False)

@@ -15,6 +15,8 @@ class ResourceInfo(NamedTuple):
     chapters: list[dict]
     edition: str | None = None
     relative_dir: tuple[str, ...] = () # 按资源树层级（学段/学科/版本）分类存放的子目录
+    textbook_title: str | None = None # 仅配套音频保留父教材与原始子标题，不从组合标题反推
+    audio_title: str | None = None
 
 def get_edition_name(resource_data: dict) -> str | None:
     """读取资源分类中的教材版别，例如 “人教版”“北师大版”。"""
@@ -33,6 +35,12 @@ def get_relative_dir(resource_data: dict) -> tuple[str, ...]:
         if dimension in TAG_DIMENSIONS and tag.get("tag_name") and dimension not in names:
             names[dimension] = tag["tag_name"]
     return tuple(names[dimension] for dimension in TAG_DIMENSIONS if dimension in names)
+
+def get_resource_title(resource_data: dict) -> str:
+    """读取平台原始标题，空的多语言标题继续回退到普通标题或资源 ID。"""
+    title_data = resource_data.get("global_title")
+    title = (title_data.get("zh-CN") or title_data.get("en")) if isinstance(title_data, dict) else title_data
+    return title or resource_data.get("title") or resource_data.get("id") or "download"
 
 def combine_resource_title(root_title: str | None, resource_title: str) -> str:
     """组合专题标题与实际资源标题，并避免平台重复标题造成超长文件名。"""
@@ -181,8 +189,7 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
 
         # 3. 获取资源标题、下载链接及章节目录
         def get_resource_info(resource_data: dict, root_title: str | None = None, edition: str | None = None) -> ResourceInfo | None:
-            title_data = resource_data.get("global_title")
-            resource_title: str = title_data.get("zh-CN") or title_data.get("en") if isinstance(title_data, dict) else title_data or resource_data.get("title") or resource_data.get("id")
+            resource_title = get_resource_title(resource_data)
             title = combine_resource_title(root_title, resource_title)
             resource_url: str | None = None
             resource_format = "pdf"
@@ -340,7 +347,10 @@ def parse(url: str, bookmarks: bool) -> list[ResourceInfo] | None: # 解析资�
                     for audio in audios_data:
                         audio_info = get_resource_info(audio, data.get("title"), root_edition)
                         if audio_info:
-                            resources_info.append(audio_info)
+                            resources_info.append(audio_info._replace(
+                                textbook_title=data.get("title"),
+                                audio_title=get_resource_title(audio),
+                            ))
                 except Exception: # 音频资源不是必需的，获取失败时直接跳过
                     pass
 
