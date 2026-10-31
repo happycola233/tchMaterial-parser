@@ -54,7 +54,7 @@ def main() -> None: # 程序入口：初始化界面并进入主循环
         messagebox.showwarning("警告", "获取资源列表失败，请手动填写资源链接，或重新打开本程序") # 弹出警告窗口
 
     # GUI
-    root = tk.Tk()
+    root = tk.Tk(className="tchMaterial-parser")
 
     # 主窗口、界面字体与缩放因子由本函数创建，但其余模块也要用到，
     # 因此在此写入对应模块，供它们通过 runtime.root、runtime.ui_scale 等访问
