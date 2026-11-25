@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 
 import pytest
-from pypdf import PdfReader, apply_configuration, get_configuration
+from pypdf import PdfReader, PdfWriter, apply_configuration, get_configuration
 from pypdf.errors import LimitReachedError
 
 from src.tchmaterial_parser import bookmarks
@@ -24,6 +24,27 @@ def test_large_image_keeps_content_and_nested_bookmarks(image_pdf):
     assert result.outline[0].title == "第一章"
     assert result.outline[1][0].title == "第一节"
     assert result.get_destination_page_number(result.outline[1][0]) == 0
+    assert result.pages[0]["/Resources"]["/XObject"]["/Im0"].get_data() == image_data
+
+
+def test_aes_encrypted_pdf_keeps_content_and_bookmarks(image_pdf):
+    original = PdfReader(image_pdf)
+    image_data = original.pages[0]["/Resources"]["/XObject"]["/Im0"].get_data()
+
+    # 只设置所有者密码，模拟平台教材的空用户密码 AES 加密。
+    writer = PdfWriter()
+    writer.append_pages_from_reader(original)
+    writer.encrypt("", "owner", algorithm="AES-256")
+    encrypted_pdf = image_pdf.with_name("encrypted.pdf")
+    writer.write(encrypted_pdf)
+    assert PdfReader(encrypted_pdf).is_encrypted
+
+    bookmarks.add_bookmarks(str(encrypted_pdf), [{"title": "第一章", "page_index": 1}])
+
+    result = PdfReader(encrypted_pdf)
+    assert len(result.pages) == 1
+    assert result.outline[0].title == "第一章"
+    assert result.get_destination_page_number(result.outline[0]) == 0
     assert result.pages[0]["/Resources"]["/XObject"]["/Im0"].get_data() == image_data
 
 

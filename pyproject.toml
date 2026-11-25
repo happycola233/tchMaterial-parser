@@ -14,7 +14,12 @@ authors = [{name = "肥宅水水呀"}, {name = "晨叶梦春", email = "wuziqian
 dependencies = [
     "pillow>=10,<13",
     "psutil>=5.9,<8",
-    "pypdf>=6.18,<7",
+    # pypdf 的 AES 后端依赖 cryptography；缺失时会回退到纯 Python 实现，AES 加密教材无法写入书签
+    "pypdf[crypto]>=6.18,<7",
+    # cryptography 46.0.4 起不再发布 Windows Arm64 轮子，46.0.3 是最后一个提供轮子的版本
+    "cryptography<46.0.4; sys_platform == 'win32' and platform_machine == 'ARM64'",
+    # cryptography 49 起不再发布 macOS x86_64 轮子，48.x 是最后一个提供轮子的系列
+    "cryptography<49; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "requests>=2.31,<3",
     "sv-ttk>=2.6,<3",
     "pywin32>=306; sys_platform == 'win32'",
