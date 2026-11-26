@@ -36,7 +36,7 @@ def add_bookmarks(pdf_path: str, chapters: list[dict]) -> None: # 给 PDF 添加
                         continue
 
                     # 添加书签，其中 parent 是父级书签对象，用于处理多级目录
-                    bookmark = writer.add_outline_item(title, page_num, parent=parent)
+                    bookmark = writer.add_outline_item(title=title, page_number=page_num, parent=parent)
 
                     # 如果有子章节（children），递归添加
                     if chapter.get("children"):
