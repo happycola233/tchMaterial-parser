@@ -148,8 +148,9 @@ def apply_theme(theme: Literal["system", "light", "dark"]) -> None: # 应用浅�
 
     sv_ttk.set_theme(current_theme, runtime.root)
     # sv-ttk 把配色函数绑定在 <<ThemeChanged>> 事件上，但一来该事件不会送达尚无 ttk 子控件的根窗口（首次启动时配色不生效），
-    # 二来后面每次调用 ttk::style configure 都会重新触发该事件，从而把下面的自定义配色覆盖回去，因此解绑它，改为在此显式调用一次
-    runtime.root.unbind_class("Tk", "<<ThemeChanged>>")
+    # 二来后面每次调用 ttk::style configure 都会重新触发该事件，从而把下面的自定义配色覆盖回去，因此解绑它，改为在此显式调用一次；
+    # sv-ttk 按根窗口的实际类名绑定，主窗口指定了 className，故不能写死为 Tk
+    runtime.root.unbind_class(runtime.root.winfo_class(), "<<ThemeChanged>>")
     runtime.root.tk.call("configure_colors")
 
     setup_fonts() # sv-ttk 会在首次加载主题时创建自己的命名字体，因此字体要在其之后设置
